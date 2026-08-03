@@ -11,6 +11,8 @@ namespace MacroBlocks.ViewModels;
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly HashSet<ObservableCollection<MacroBlock>> _subscribedCollections;
+    private readonly HashSet<MacroBlock> _trackedBlocks = [];
+    private readonly ScriptHistory _history = new();
     private readonly MacroPlaybackEngine _engine;
     private readonly IScriptLibrary _library;
     private readonly ScreenPointPicker _pointPicker = new();
@@ -46,6 +48,9 @@ public sealed class MainViewModel : ViewModelBase
         _subscribedCollections = [];
 
         EnsureTreeSubscriptions(_script.Blocks);
+        _history.Attach(() => _script);
+        _history.Reset(_script);
+        _history.Changed += (_, _) => RefreshCommands();
         _library.Changed += (_, _) => Application.Current.Dispatcher.Invoke(RefreshLibrary);
 
         _engine.Started += (_, _) =>
@@ -93,6 +98,8 @@ public sealed class MainViewModel : ViewModelBase
         SaveScriptCommand = new RelayCommand(SaveScript, () => CanEditScript() && Blocks.Count > 0);
         OpenLibraryScriptCommand = new RelayCommand(OpenLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
         DeleteLibraryScriptCommand = new RelayCommand(DeleteLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
+        UndoCommand = new RelayCommand(Undo, () => CanEditScript() && _history.CanUndo);
+        RedoCommand = new RelayCommand(Redo, () => CanEditScript() && _history.CanRedo);
 
         RefreshLibrary();
     }
@@ -110,10 +117,15 @@ public sealed class MainViewModel : ViewModelBase
         get => _scriptName;
         set
         {
-            if (SetProperty(ref _scriptName, value))
+            if (_scriptName == value)
             {
-                _script.Name = value;
+                return;
             }
+
+            _history.OnPropertyEdited(_script);
+            _scriptName = value;
+            _script.Name = value;
+            OnPropertyChanged();
         }
     }
 
@@ -219,7 +231,10 @@ public sealed class MainViewModel : ViewModelBase
             var label = string.IsNullOrWhiteSpace(value) ? "?" : value.Trim().ToUpperInvariant();
             SelectedKeyPressEvent.KeyLabel = label;
             SelectedKeyPressEvent.VirtualKey = ResolveVirtualKey(label);
-            SyncContinueUntilLabels();
+            using (_history.ApplyScope())
+            {
+                SyncContinueUntilLabels();
+            }
         }
     }
 
@@ -252,10 +267,16 @@ public sealed class MainViewModel : ViewModelBase
         get => _loopForever;
         set
         {
-            if (SetProperty(ref _loopForever, value))
+            if (_loopForever == value)
             {
-                _script.LoopForever = value;
+                return;
             }
+
+            _history.CheckpointBeforeChange(_script);
+            _loopForever = value;
+            _script.LoopForever = value;
+            OnPropertyChanged();
+            _history.CaptureBaseline(_script);
         }
     }
 
@@ -278,6 +299,8 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand SaveScriptCommand { get; }
     public ICommand OpenLibraryScriptCommand { get; }
     public ICommand DeleteLibraryScriptCommand { get; }
+    public ICommand UndoCommand { get; }
+    public ICommand RedoCommand { get; }
 
     private bool CanEditScript() => !IsRunning && !IsRecordingLocation;
 
@@ -295,28 +318,36 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedRunSubscriptId));
     }
 
-    private void AddDelay()
+    private void Mutate(Action action)
+    {
+        _history.CheckpointBeforeChange(_script);
+        action();
+        _history.CaptureBaseline(_script);
+        RefreshCommands();
+    }
+
+    private void AddDelay() => Mutate(() =>
     {
         var block = new DelayBlock { Milliseconds = 500 };
         Blocks.Add(block);
         SelectedBlock = block;
-    }
+    });
 
-    private void AddMouseClick()
+    private void AddMouseClick() => Mutate(() =>
     {
         var block = new MouseClickBlock { X = 100, Y = 100, Button = Models.MouseButton.Left };
         Blocks.Add(block);
         SelectedBlock = block;
-    }
+    });
 
-    private void AddMouseMove()
+    private void AddMouseMove() => Mutate(() =>
     {
         var block = new MouseMoveBlock { X = 200, Y = 200 };
         Blocks.Add(block);
         SelectedBlock = block;
-    }
+    });
 
-    private void AddKeyPress()
+    private void AddKeyPress() => Mutate(() =>
     {
         var block = new KeyPressBlock
         {
@@ -325,16 +356,16 @@ public sealed class MainViewModel : ViewModelBase
         };
         Blocks.Add(block);
         SelectedBlock = block;
-    }
+    });
 
-    private void AddKeyPressEvent()
+    private void AddKeyPressEvent() => Mutate(() =>
     {
         var block = new KeyPressEventBlock();
         Blocks.Add(block);
         SelectedBlock = block;
-    }
+    });
 
-    private void AddContinueUntil()
+    private void AddContinueUntil() => Mutate(() =>
     {
         var block = new ContinueUntilBlock();
 
@@ -348,9 +379,9 @@ public sealed class MainViewModel : ViewModelBase
         Blocks.Add(block);
         EnsureTreeSubscriptions(block.Children);
         SelectedBlock = block;
-    }
+    });
 
-    private void AddRunSubscript()
+    private void AddRunSubscript() => Mutate(() =>
     {
         var block = new RunSubscriptBlock();
         var candidates = LibraryScripts.Where(s => s.Id != _script.Id).ToList();
@@ -362,24 +393,23 @@ public sealed class MainViewModel : ViewModelBase
 
         Blocks.Add(block);
         SelectedBlock = block;
-    }
+    });
 
     private void RemoveSelected()
     {
-        if (SelectedBlock is null)
+        if (SelectedBlock is null
+            || !BlockTree.TryFindOwner(Blocks, SelectedBlock, out var owner, out var index))
         {
             return;
         }
 
-        if (!BlockTree.TryFindOwner(Blocks, SelectedBlock, out var owner, out var index))
+        Mutate(() =>
         {
-            return;
-        }
-
-        owner.RemoveAt(index);
-        SelectedBlock = owner.Count == 0
-            ? null
-            : owner[Math.Clamp(index, 0, owner.Count - 1)];
+            owner.RemoveAt(index);
+            SelectedBlock = owner.Count == 0
+                ? null
+                : owner[Math.Clamp(index, 0, owner.Count - 1)];
+        });
     }
 
     private bool CanMoveSelected(int delta)
@@ -412,20 +442,53 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        owner.Move(index, target);
-        RefreshCommands();
+        Mutate(() => owner.Move(index, target));
     }
 
-    private void Clear()
+    private void Clear() => Mutate(() =>
     {
         Blocks.Clear();
         SelectedBlock = null;
-    }
+    });
 
     private void NewScript()
     {
-        ReplaceWorkingScript(new MacroScript());
+        ReplaceWorkingScript(new MacroScript(), resetHistory: true);
         Status = "New script";
+    }
+
+    private void Undo()
+    {
+        var snapshot = _history.Undo(_script);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        using (_history.ApplyScope())
+        {
+            ReplaceWorkingScript(snapshot, resetHistory: false);
+        }
+
+        Status = "Undo";
+        RefreshCommands();
+    }
+
+    private void Redo()
+    {
+        var snapshot = _history.Redo(_script);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        using (_history.ApplyScope())
+        {
+            ReplaceWorkingScript(snapshot, resetHistory: false);
+        }
+
+        Status = "Redo";
+        RefreshCommands();
     }
 
     private void SaveScript()
@@ -460,7 +523,7 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        ReplaceWorkingScript(loaded);
+        ReplaceWorkingScript(loaded, resetHistory: true);
         Status = $"Opened '{loaded.Name}'";
     }
 
@@ -490,14 +553,20 @@ public sealed class MainViewModel : ViewModelBase
         Status = $"Deleted '{name}' from library";
     }
 
-    private void ReplaceWorkingScript(MacroScript script)
+    private void ReplaceWorkingScript(MacroScript script, bool resetHistory = true)
     {
         foreach (var collection in _subscribedCollections.ToList())
         {
             collection.CollectionChanged -= OnBlocksChanged;
         }
 
+        foreach (var block in _trackedBlocks.ToList())
+        {
+            block.PropertyChanged -= OnTrackedBlockPropertyChanged;
+        }
+
         _subscribedCollections.Clear();
+        _trackedBlocks.Clear();
         _script = script;
         EnsureTreeSubscriptions(_script.Blocks);
 
@@ -510,9 +579,22 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(ScriptName));
         OnPropertyChanged(nameof(LoopForever));
 
-        RefreshAvailableEvents();
-        SyncContinueUntilLabels();
-        SyncRunSubscriptLabels();
+        using (_history.ApplyScope())
+        {
+            RefreshAvailableEvents();
+            SyncContinueUntilLabels();
+            SyncRunSubscriptLabels();
+        }
+
+        if (resetHistory)
+        {
+            _history.Reset(_script);
+        }
+        else
+        {
+            _history.CaptureBaseline(_script);
+        }
+
         RefreshCommands();
     }
 
@@ -585,8 +667,10 @@ public sealed class MainViewModel : ViewModelBase
             var point = await _pointPicker.PickNextClickAsync();
             if (point is { } captured && ReferenceEquals(SelectedMouseMove, target))
             {
+                _history.CheckpointBeforeChange(_script);
                 target.X = captured.X;
                 target.Y = captured.Y;
+                _history.CaptureBaseline(_script);
                 Status = $"Location set to ({captured.X}, {captured.Y})";
             }
             else if (point is null)
@@ -616,14 +700,6 @@ public sealed class MainViewModel : ViewModelBase
         _pointPicker.Cancel();
     }
 
-    private void OnBlocksChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        EnsureTreeSubscriptions(Blocks);
-        RefreshAvailableEvents();
-        SyncContinueUntilLabels();
-        SyncRunSubscriptLabels();
-    }
-
     private void EnsureTreeSubscriptions(ObservableCollection<MacroBlock> list)
     {
         if (_subscribedCollections.Add(list))
@@ -631,9 +707,48 @@ public sealed class MainViewModel : ViewModelBase
             list.CollectionChanged += OnBlocksChanged;
         }
 
-        foreach (var flow in list.OfType<ContinueUntilBlock>())
+        foreach (var block in list)
         {
-            EnsureTreeSubscriptions(flow.Children);
+            TrackBlock(block);
+            if (block is ContinueUntilBlock flow)
+            {
+                EnsureTreeSubscriptions(flow.Children);
+            }
+        }
+    }
+
+    private void TrackBlock(MacroBlock block)
+    {
+        if (!_trackedBlocks.Add(block))
+        {
+            return;
+        }
+
+        block.PropertyChanged += OnTrackedBlockPropertyChanged;
+    }
+
+    private void OnTrackedBlockPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(MacroBlock.Summary)
+            or nameof(MacroBlock.DisplayName)
+            or nameof(ContinueUntilBlock.EventLabel)
+            or nameof(RunSubscriptBlock.ScriptName))
+        {
+            return;
+        }
+
+        _history.OnPropertyEdited(_script);
+        RefreshCommands();
+    }
+
+    private void OnBlocksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        EnsureTreeSubscriptions(Blocks);
+        using (_history.ApplyScope())
+        {
+            RefreshAvailableEvents();
+            SyncContinueUntilLabels();
+            SyncRunSubscriptLabels();
         }
     }
 
@@ -724,24 +839,47 @@ public sealed class MainViewModel : ViewModelBase
             }
 
             to = Math.Clamp(to, 0, targetOwner.Count - 1);
-            if (sourceIndex != to)
+            if (sourceIndex == to)
             {
-                targetOwner.Move(sourceIndex, to);
-            }
-        }
-        else
-        {
-            sourceOwner.RemoveAt(sourceIndex);
-            var insertAt = Math.Clamp(targetIndex, 0, targetOwner.Count);
-            targetOwner.Insert(insertAt, block);
-            if (block is ContinueUntilBlock nested)
-            {
-                EnsureTreeSubscriptions(nested.Children);
+                return;
             }
         }
 
-        SelectedBlock = block;
-        Status = "Moved block";
+        Mutate(() =>
+        {
+            if (!BlockTree.TryFindOwner(Blocks, block, out sourceOwner, out sourceIndex))
+            {
+                return;
+            }
+
+            if (ReferenceEquals(sourceOwner, targetOwner))
+            {
+                var to = targetIndex;
+                if (sourceIndex < to)
+                {
+                    to--;
+                }
+
+                to = Math.Clamp(to, 0, targetOwner.Count - 1);
+                if (sourceIndex != to)
+                {
+                    targetOwner.Move(sourceIndex, to);
+                }
+            }
+            else
+            {
+                sourceOwner.RemoveAt(sourceIndex);
+                var insertAt = Math.Clamp(targetIndex, 0, targetOwner.Count);
+                targetOwner.Insert(insertAt, block);
+                if (block is ContinueUntilBlock nested)
+                {
+                    EnsureTreeSubscriptions(nested.Children);
+                }
+            }
+
+            SelectedBlock = block;
+            Status = "Moved block";
+        });
     }
 
     public void MoveBlockRelative(
@@ -772,21 +910,24 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var insertAt = Math.Clamp(index, 0, owner.Count);
-        owner.Insert(insertAt, block);
-        if (block is ContinueUntilBlock flow)
+        Mutate(() =>
         {
-            EnsureTreeSubscriptions(flow.Children);
-            if (AvailableEvents.Count > 0)
+            var insertAt = Math.Clamp(index, 0, owner.Count);
+            owner.Insert(insertAt, block);
+            if (block is ContinueUntilBlock flow)
             {
-                var evt = AvailableEvents[0];
-                flow.EventBlockId = evt.Id;
-                flow.EventLabel = evt.Name;
+                EnsureTreeSubscriptions(flow.Children);
+                if (AvailableEvents.Count > 0)
+                {
+                    var evt = AvailableEvents[0];
+                    flow.EventBlockId = evt.Id;
+                    flow.EventLabel = evt.Name;
+                }
             }
-        }
 
-        SelectedBlock = block;
-        Status = $"Added {block.DisplayName}";
+            SelectedBlock = block;
+            Status = $"Added {block.DisplayName}";
+        });
     }
 
     public static MacroBlock? CreatePaletteBlock(string kind)
@@ -822,18 +963,21 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        if (evt is null)
+        Mutate(() =>
         {
-            flow.EventBlockId = null;
-            flow.EventLabel = "(no event)";
-            Status = "Cleared Continue Until event";
-            return;
-        }
+            if (evt is null)
+            {
+                flow.EventBlockId = null;
+                flow.EventLabel = "(no event)";
+                Status = "Cleared Continue Until event";
+                return;
+            }
 
-        flow.EventBlockId = evt.Id;
-        flow.EventLabel = evt.Name;
-        SelectedBlock = flow;
-        Status = $"Assigned '{evt.Name}' to Continue Until";
+            flow.EventBlockId = evt.Id;
+            flow.EventLabel = evt.Name;
+            SelectedBlock = flow;
+            Status = $"Assigned '{evt.Name}' to Continue Until";
+        });
     }
 
     /// <summary>
@@ -846,18 +990,23 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var evt = new KeyPressEventBlock();
-        if (BlockTree.TryFindOwner(Blocks, flow, out var owner, out var index))
+        Mutate(() =>
         {
-            owner.Insert(index, evt);
-        }
-        else
-        {
-            Blocks.Add(evt);
-        }
+            var evt = new KeyPressEventBlock();
+            if (BlockTree.TryFindOwner(Blocks, flow, out var owner, out var index))
+            {
+                owner.Insert(index, evt);
+            }
+            else
+            {
+                Blocks.Add(evt);
+            }
 
-        AssignEventToContinueUntil(flow, evt);
-        Status = $"Created and assigned '{evt.Name}' to Continue Until";
+            flow.EventBlockId = evt.Id;
+            flow.EventLabel = evt.Name;
+            SelectedBlock = flow;
+            Status = $"Created and assigned '{evt.Name}' to Continue Until";
+        });
     }
 
     private void SelectRunSubscript(MacroScript? script)
@@ -937,5 +1086,7 @@ public sealed class MainViewModel : ViewModelBase
         (SaveScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (OpenLibraryScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (DeleteLibraryScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (UndoCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (RedoCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 }

@@ -13,7 +13,8 @@
         MinHeight="520"
         MinWidth="900"
         Background="#F3F4F6"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        PreviewKeyDown="Window_PreviewKeyDown">
     <Window.DataContext>
         <vm:MainViewModel />
     </Window.DataContext>

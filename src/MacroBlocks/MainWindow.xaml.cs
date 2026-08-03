@@ -75,6 +75,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (IsTextInputFocused() || Vm is null)
+        {
+            return;
+        }
+
+        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        var shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        if (!ctrl)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Z && !shift && Vm.UndoCommand.CanExecute(null))
+        {
+            Vm.UndoCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if ((e.Key == Key.Y || (e.Key == Key.Z && shift)) && Vm.RedoCommand.CanExecute(null))
+        {
+            Vm.RedoCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     private static bool IsTextInputFocused()
         => Keyboard.FocusedElement is TextBox or PasswordBox or ComboBox { IsEditable: true };
 
