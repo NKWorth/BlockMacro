@@ -15,6 +15,7 @@ namespace MacroBlocks.Models;
 [JsonDerivedType(typeof(MouseMoveBlock), "mouseMove")]
 [JsonDerivedType(typeof(MouseClickBlock), "mouseClick")]
 [JsonDerivedType(typeof(KeyPressBlock), "keyPress")]
+[JsonDerivedType(typeof(ReturnBooleanBlock), "returnBoolean")]
 [JsonDerivedType(typeof(KeyPressEventBlock), "eventKeyPress")]
 [JsonDerivedType(typeof(ContinueUntilBlock), "continueUntil")]
 [JsonDerivedType(typeof(EndContinueBlock), "endContinue")]

@@ -1,4 +1,5 @@
 using MacroBlocks.Models;
+using MacroBlocks.Models.Graph;
 
 namespace MacroBlocks.Services.Playback;
 
@@ -62,9 +63,18 @@ public sealed class MacroPlaybackEngine
                         runtime.Reset(evt.Id);
                     }
 
-                    var blocks = script.Blocks.ToArray();
-                    await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, callStack, token)
-                        .ConfigureAwait(false);
+                    if (script.FlowGraph.HasNodes)
+                    {
+                        await ExecuteGraphAsync(script.FlowGraph, runtime, callStack, token)
+                            .ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        runtime.BeginScriptOutput();
+                        var blocks = script.Blocks.ToArray();
+                        await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, callStack, token)
+                            .ConfigureAwait(false);
+                    }
                 }
                 while (script.LoopForever && !token.IsCancellationRequested);
             }
@@ -106,17 +116,124 @@ public sealed class MacroPlaybackEngine
 
             foreach (var call in BlockTree.EnumerateSubscripts(current.Blocks))
             {
-                if (call.ScriptId is not { } id)
+                EnqueueLibrary(call.ScriptId, queue);
+            }
+
+            foreach (var node in current.FlowGraph.Nodes.Where(n => n.Kind == FlowGraphNodeKind.RunScript))
+            {
+                EnqueueLibrary(node.ScriptId, queue);
+            }
+        }
+    }
+
+    private void EnqueueLibrary(Guid? scriptId, Queue<MacroScript> queue)
+    {
+        if (scriptId is not { } id)
+        {
+            return;
+        }
+
+        var sub = _library.Get(id);
+        if (sub is not null)
+        {
+            queue.Enqueue(sub);
+        }
+    }
+
+    private async Task ExecuteGraphAsync(
+        FlowGraph graph,
+        ScriptRuntime runtime,
+        Stack<Guid> callStack,
+        CancellationToken token)
+    {
+        var entry = graph.FindEntryNode()
+            ?? throw new InvalidOperationException("Flow graph has no entry node.");
+
+        var current = entry;
+        var visited = new HashSet<Guid>();
+
+        while (current is not null)
+        {
+            token.ThrowIfCancellationRequested();
+
+            if (!visited.Add(current.Id))
+            {
+                throw new InvalidOperationException(
+                    $"Cycle detected in flow graph at node '{current.DisplayTitle}'.");
+            }
+
+            switch (current.Kind)
+            {
+                case FlowGraphNodeKind.RunScript:
                 {
-                    continue;
+                    var output = await ExecuteGraphRunScriptAsync(current, runtime, callStack, token)
+                        .ConfigureAwait(false);
+                    runtime.RememberNodeOutput(current.Id, output);
+
+                    var next = graph.FindOutbound(current.Id, FlowGraphPort.Next);
+                    current = next is null
+                        ? null
+                        : graph.Nodes.FirstOrDefault(n => n.Id == next.ToId);
+                    break;
                 }
 
-                var sub = _library.Get(id);
-                if (sub is not null)
+                case FlowGraphNodeKind.If:
                 {
-                    queue.Enqueue(sub);
+                    var conditionEdge = graph.FindInboundCondition(current.Id);
+                    var condition = conditionEdge is not null
+                        && runtime.GetNodeOutput(conditionEdge.FromId);
+
+                    StatusChanged?.Invoke(
+                        this,
+                        condition ? "If: true → Then" : "If: false → Else");
+
+                    var port = condition ? FlowGraphPort.Then : FlowGraphPort.Else;
+                    var branch = graph.FindOutbound(current.Id, port);
+                    current = branch is null
+                        ? null
+                        : graph.Nodes.FirstOrDefault(n => n.Id == branch.ToId);
+                    break;
                 }
+
+                default:
+                    throw new NotSupportedException($"Unknown graph node kind: {current.Kind}");
             }
+        }
+    }
+
+    private async Task<bool> ExecuteGraphRunScriptAsync(
+        FlowGraphNode node,
+        ScriptRuntime runtime,
+        Stack<Guid> callStack,
+        CancellationToken token)
+    {
+        if (node.ScriptId is not { } scriptId)
+        {
+            throw new InvalidOperationException($"Graph node '{node.Label}' has no script selected.");
+        }
+
+        if (callStack.Contains(scriptId))
+        {
+            throw new InvalidOperationException(
+                $"Circular subscript reference detected while calling '{node.Label}'.");
+        }
+
+        var sub = _library.Get(scriptId)
+            ?? throw new InvalidOperationException($"Subscript '{node.Label}' was not found in the library.");
+
+        StatusChanged?.Invoke(this, $"Graph: {node.Label}");
+        callStack.Push(scriptId);
+        try
+        {
+            runtime.BeginScriptOutput();
+            var blocks = sub.Blocks.ToArray();
+            await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, callStack, token)
+                .ConfigureAwait(false);
+            return runtime.CurrentBooleanOutput;
+        }
+        finally
+        {
+            callStack.Pop();
         }
     }
 
@@ -147,6 +264,11 @@ public sealed class MacroPlaybackEngine
                 case RunSubscriptBlock call:
                     StatusChanged?.Invoke(this, $"Running: {call.DisplayName} — {call.Summary}");
                     await ExecuteSubscriptAsync(call, runtime, callStack, token).ConfigureAwait(false);
+                    break;
+
+                case ReturnBooleanBlock ret:
+                    runtime.SetBooleanOutput(ret.Value);
+                    StatusChanged?.Invoke(this, $"Return Boolean: {ret.Summary}");
                     break;
 
                 default:
@@ -180,9 +302,14 @@ public sealed class MacroPlaybackEngine
         callStack.Push(scriptId);
         try
         {
+            var previous = runtime.CurrentBooleanOutput;
+            runtime.BeginScriptOutput();
             var blocks = sub.Blocks.ToArray();
             await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, callStack, token)
                 .ConfigureAwait(false);
+            // Nested subscript output does not overwrite the caller's Return Boolean unless desired;
+            // restore caller output so only explicit Return Boolean in this frame counts.
+            runtime.SetBooleanOutput(previous);
         }
         finally
         {

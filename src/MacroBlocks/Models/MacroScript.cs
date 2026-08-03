@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
+using MacroBlocks.Models.Graph;
 
 namespace MacroBlocks.Models;
 
 /// <summary>
 /// Ordered sequence of blocks that can be played, saved, and reused as a subscript.
+/// Optionally owns a <see cref="FlowGraph"/> for orchestrating library scripts.
 /// </summary>
 public sealed class MacroScript
 {
@@ -42,6 +44,11 @@ public sealed class MacroScript
         }
     }
 
+    /// <summary>
+    /// Optional orchestration graph. When non-empty, Run prefers the graph over <see cref="Blocks"/>.
+    /// </summary>
+    public FlowGraph FlowGraph { get; set; } = new();
+
     public MacroScript CloneDeep()
     {
         var copy = new MacroScript
@@ -49,7 +56,8 @@ public sealed class MacroScript
             Id = Id,
             Name = Name,
             LoopForever = LoopForever,
-            UpdatedAt = UpdatedAt
+            UpdatedAt = UpdatedAt,
+            FlowGraph = FlowGraph.CloneDeep()
         };
 
         foreach (var block in Blocks)

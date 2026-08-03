@@ -6,9 +6,9 @@ Keep a layered structure. New code belongs in the matching layer and namespace:
 
 | Layer | Path | Namespace | Responsibility |
 |-------|------|-----------|----------------|
-| Domain | `Models/` | `MacroBlocks.Models*` | Script/block data, tree helpers, migration |
+| Domain | `Models/` | `MacroBlocks.Models*` | Script/block data, tree helpers, migration, flow graph |
 | Application / infra | `Services/` | `MacroBlocks.Services.*` | Playback, input injection, persistence |
-| Presentation logic | `ViewModels/` | `MacroBlocks.ViewModels` | Commands, selection, inspector state |
+| Presentation logic | `ViewModels/` | `MacroBlocks.ViewModels` | Commands, selection, inspector, graph VM |
 | UI chrome | `Ui/` | `MacroBlocks.Ui*` | Drag/drop helpers, converters, templates |
 | Native | `Native/` | `MacroBlocks.Native` | P/Invoke only |
 
@@ -16,10 +16,20 @@ Keep a layered structure. New code belongs in the matching layer and namespace:
 
 ```
 MacroBlock
-├── ActionBlock     Models/Actions/     Delay, MouseMove, MouseClick, KeyPress
+├── ActionBlock     Models/Actions/     Delay, MouseMove, MouseClick, KeyPress, ReturnBoolean
 ├── EventBlock      Models/Events/      KeyPressEvent (and future events)
 └── FlowBlock       Models/Flow/        ContinueUntil, RunSubscript, EndContinue
 ```
+
+### Flow graph (orchestration)
+
+```
+Models/Graph/     FlowGraph, FlowGraphNode, FlowGraphEdge, ports/kinds
+```
+
+- Working `MacroScript` owns optional `FlowGraph`. When the graph has nodes, **Run executes the graph**; otherwise the linear `Blocks` list.
+- `RunScript` nodes reference library scripts; `If` nodes branch on a Boolean from a Condition edge.
+- Subscripts expose Booleans via `ReturnBooleanBlock` (last write wins for that run).
 
 - Prefer extending the matching base (`ActionBlock` / `EventBlock` / `FlowBlock`).
 - Nested bodies implement `IBlockContainer`; event slots implement `IEventSlotHost`.
@@ -48,7 +58,7 @@ Ui/
 ```
 
 - Keep `MainWindow.xaml(.cs)` thin: wire events to the view model; put reusable chrome under `Ui/`.
-- ViewModels stay free of drag-visuals and Win32 details.
+- `FlowGraphViewModel` owns graph selection/wiring; MainViewModel owns the working script + history.
 
 ## Growth rules
 
@@ -57,7 +67,7 @@ Ui/
 3. **No circular deps** — Models ← Services ← ViewModels/Ui; Native only used by Input.
 4. **New block types** — add under Actions/Events/Flow, register on `MacroBlock` polymorphic attributes, update palette + inspector only as needed.
 5. **Prefer small focused types** over growing `MainViewModel` / `MainWindow` further; extract collaborators when a feature adds a distinct responsibility.
-6. **Tests** (when added) mirror layers: domain tests for blocks/tree, service tests for playback/persistence.
+6. **Tests** (when added) mirror layers: domain tests for blocks/tree/graph, service tests for playback/persistence.
 
 ## Run
 

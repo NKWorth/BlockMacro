@@ -2,6 +2,7 @@ global using MacroBlocks.Models;
 global using MacroBlocks.Models.Actions;
 global using MacroBlocks.Models.Events;
 global using MacroBlocks.Models.Flow;
+global using MacroBlocks.Models.Graph;
 global using MacroBlocks.Services.Input;
 global using MacroBlocks.Services.Persistence;
 global using MacroBlocks.Services.Playback;

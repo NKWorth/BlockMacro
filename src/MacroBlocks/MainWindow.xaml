@@ -332,6 +332,13 @@
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                        <Button Content="Return Boolean"
+                                Style="{StaticResource ToolButton}"
+                                Tag="ReturnBoolean"
+                                ToolTip="Sets this script's Boolean output for Flow Graph If nodes"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
 
                         <TextBlock Text="Flow"
                                    FontSize="11"
@@ -404,7 +411,10 @@
                                  Height="110"
                                  BorderBrush="#E5E7EB"
                                  BorderThickness="1"
-                                 DisplayMemberPath="Name" />
+                                 DisplayMemberPath="Name"
+                                 PreviewMouseLeftButtonDown="LibraryItem_PreviewMouseLeftButtonDown"
+                                 PreviewMouseMove="LibraryItem_PreviewMouseMove"
+                                 PreviewMouseLeftButtonUp="LibraryItem_PreviewMouseLeftButtonUp" />
                     </DockPanel>
                 </Border>
 
@@ -416,9 +426,17 @@
                     <DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                             <StackPanel>
-                                <TextBlock Text="Script"
-                                           Style="{StaticResource SectionTitle}"
-                                           Margin="0,0,0,6" />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <Button Content="Script"
+                                            Padding="10,4"
+                                            Margin="0,0,6,0"
+                                            Command="{Binding ShowScriptViewCommand}"
+                                            FontWeight="{Binding ShowScriptEditor, Converter={x:Static conv:BoolToFontWeightConverter.Instance}}" />
+                                    <Button Content="Flow Graph"
+                                            Padding="10,4"
+                                            Command="{Binding ShowGraphViewCommand}"
+                                            FontWeight="{Binding ShowFlowGraph, Converter={x:Static conv:BoolToFontWeightConverter.Instance}}" />
+                                </StackPanel>
                                 <TextBox Text="{Binding ScriptName, UpdateSourceTrigger=PropertyChanged}"
                                          Padding="6,4"
                                          Width="220"
@@ -427,7 +445,8 @@
 
                             <StackPanel Orientation="Horizontal"
                                         HorizontalAlignment="Right"
-                                        VerticalAlignment="Bottom">
+                                        VerticalAlignment="Bottom"
+                                        Visibility="{Binding ShowScriptEditor, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                                 <Button Content="↑"
                                         Width="32"
                                         Margin="0,0,4,0"
@@ -446,9 +465,28 @@
                                         Padding="8,4"
                                         Command="{Binding ClearCommand}" />
                             </StackPanel>
+
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        Visibility="{Binding ShowFlowGraph, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                                <Button Content="Add If"
+                                        Margin="0,0,4,0"
+                                        Padding="8,4"
+                                        Command="{Binding FlowGraphVm.AddIfNodeCommand}" />
+                                <Button Content="Remove"
+                                        Margin="0,0,4,0"
+                                        Padding="8,4"
+                                        Command="{Binding FlowGraphVm.DeleteSelectionCommand}" />
+                                <Button Content="Clear"
+                                        Padding="8,4"
+                                        Command="{Binding ClearCommand}" />
+                            </StackPanel>
                         </DockPanel>
 
+                        <!-- Linear script editor -->
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      Visibility="{Binding ShowScriptEditor, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"
                                       AllowDrop="True"
                                       DragOver="ScriptRoot_DragOver"
                                       Drop="ScriptRoot_Drop"
@@ -457,6 +495,177 @@
                                           ItemsSource="{Binding Blocks}"
                                           ItemTemplateSelector="{StaticResource BlockTemplateSelector}" />
                         </ScrollViewer>
+
+                        <!-- Flow graph canvas -->
+                        <Border Visibility="{Binding ShowFlowGraph, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}"
+                                Background="#F8FAFC"
+                                BorderBrush="#E5E7EB"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                AllowDrop="True"
+                                DragOver="GraphCanvas_DragOver"
+                                Drop="GraphCanvas_Drop"
+                                ClipToBounds="True">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto"
+                                          x:Name="GraphScroll">
+                                <Canvas x:Name="GraphCanvas"
+                                        Width="2400"
+                                        Height="1600"
+                                        Background="Transparent"
+                                        MouseMove="GraphCanvas_MouseMove"
+                                        MouseLeftButtonUp="GraphCanvas_MouseLeftButtonUp"
+                                        MouseLeftButtonDown="GraphCanvas_BackgroundDown">
+                                    <!-- Edges -->
+                                    <ItemsControl ItemsSource="{Binding FlowGraphVm.EdgeVisuals}"
+                                                  IsHitTestVisible="True">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Line X1="{Binding X1}"
+                                                      Y1="{Binding Y1}"
+                                                      X2="{Binding X2}"
+                                                      Y2="{Binding Y2}"
+                                                      Stroke="#64748B"
+                                                      StrokeThickness="2"
+                                                      Cursor="Hand"
+                                                      MouseLeftButtonDown="GraphEdge_MouseLeftButtonDown" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Pending wire -->
+                                    <Line X1="{Binding FlowGraphVm.PendingWireStart.X}"
+                                          Y1="{Binding FlowGraphVm.PendingWireStart.Y}"
+                                          X2="{Binding FlowGraphVm.PendingWireEnd.X}"
+                                          Y2="{Binding FlowGraphVm.PendingWireEnd.Y}"
+                                          Stroke="#2563EB"
+                                          StrokeThickness="2"
+                                          StrokeDashArray="4 2"
+                                          IsHitTestVisible="False"
+                                          Visibility="{Binding FlowGraphVm.PendingWireVisibility}" />
+
+                                    <!-- Nodes -->
+                                    <ItemsControl ItemsSource="{Binding FlowGraphVm.Nodes}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="{Binding X}" />
+                                                <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Width="160"
+                                                        MinHeight="72"
+                                                        Background="White"
+                                                        BorderBrush="#94A3B8"
+                                                        BorderThickness="1"
+                                                        CornerRadius="6"
+                                                        Padding="8"
+                                                        Cursor="SizeAll"
+                                                        MouseLeftButtonDown="GraphNode_MouseLeftButtonDown"
+                                                        MouseMove="GraphNode_MouseMove"
+                                                        MouseLeftButtonUp="GraphNode_MouseLeftButtonUp">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Kind}" Value="If">
+                                                                    <Setter Property="Background" Value="#EFF6FF" />
+                                                                    <Setter Property="BorderBrush" Value="#3B82F6" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="*" />
+                                                        </Grid.RowDefinitions>
+                                                        <TextBlock Text="{Binding DisplayTitle}"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="#0F172A" />
+                                                        <TextBlock Grid.Row="1"
+                                                                   Text="{Binding Label}"
+                                                                   FontSize="11"
+                                                                   Foreground="#64748B"
+                                                                   Margin="0,2,0,6"
+                                                                   Visibility="{Binding Kind, Converter={x:Static conv:RunScriptKindVisibilityConverter.Instance}}" />
+
+                                                        <!-- Ports -->
+                                                        <StackPanel Grid.Row="2" Orientation="Vertical">
+                                                            <!-- Condition input (If) -->
+                                                            <StackPanel Orientation="Horizontal"
+                                                                        Margin="0,0,0,4"
+                                                                        Visibility="{Binding Kind, Converter={x:Static conv:IfKindVisibilityConverter.Instance}}">
+                                                                <Ellipse Width="10" Height="10"
+                                                                         Fill="#F59E0B"
+                                                                         Stroke="#B45309"
+                                                                         Cursor="Cross"
+                                                                         Tag="ConditionIn"
+                                                                         MouseLeftButtonDown="GraphPort_MouseLeftButtonDown" />
+                                                                <TextBlock Text="cond" FontSize="10" Margin="4,0,0,0" Foreground="#92400E" VerticalAlignment="Center" />
+                                                            </StackPanel>
+
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,2"
+                                                                        Visibility="{Binding Kind, Converter={x:Static conv:RunScriptKindVisibilityConverter.Instance}}">
+                                                                <TextBlock Text="next" FontSize="10" Margin="0,0,4,0" Foreground="#64748B" VerticalAlignment="Center" />
+                                                                <Ellipse Width="10" Height="10"
+                                                                         Fill="#22C55E"
+                                                                         Stroke="#15803D"
+                                                                         Cursor="Cross"
+                                                                         Tag="Next"
+                                                                         MouseLeftButtonDown="GraphPort_MouseLeftButtonDown" />
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,2"
+                                                                        Visibility="{Binding Kind, Converter={x:Static conv:RunScriptKindVisibilityConverter.Instance}}">
+                                                                <TextBlock Text="bool" FontSize="10" Margin="0,0,4,0" Foreground="#B45309" VerticalAlignment="Center" />
+                                                                <Ellipse Width="10" Height="10"
+                                                                         Fill="#F59E0B"
+                                                                         Stroke="#B45309"
+                                                                         Cursor="Cross"
+                                                                         Tag="Condition"
+                                                                         MouseLeftButtonDown="GraphPort_MouseLeftButtonDown" />
+                                                            </StackPanel>
+
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,2"
+                                                                        Visibility="{Binding Kind, Converter={x:Static conv:IfKindVisibilityConverter.Instance}}">
+                                                                <TextBlock Text="then" FontSize="10" Margin="0,0,4,0" Foreground="#2563EB" VerticalAlignment="Center" />
+                                                                <Ellipse Width="10" Height="10"
+                                                                         Fill="#3B82F6"
+                                                                         Stroke="#1D4ED8"
+                                                                         Cursor="Cross"
+                                                                         Tag="Then"
+                                                                         MouseLeftButtonDown="GraphPort_MouseLeftButtonDown" />
+                                                            </StackPanel>
+                                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0"
+                                                                        Visibility="{Binding Kind, Converter={x:Static conv:IfKindVisibilityConverter.Instance}}">
+                                                                <TextBlock Text="else" FontSize="10" Margin="0,0,4,0" Foreground="#64748B" VerticalAlignment="Center" />
+                                                                <Ellipse Width="10" Height="10"
+                                                                         Fill="#94A3B8"
+                                                                         Stroke="#475569"
+                                                                         Cursor="Cross"
+                                                                         Tag="Else"
+                                                                         MouseLeftButtonDown="GraphPort_MouseLeftButtonDown" />
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Canvas>
+                            </ScrollViewer>
+                        </Border>
                     </DockPanel>
                 </Border>
             </Grid>
@@ -506,6 +715,56 @@
                             <TextBox Text="{Binding SelectedDelay.Milliseconds, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,10"
                                      Padding="6,4" />
+                        </StackPanel>
+
+                        <!-- Return Boolean editor -->
+                        <StackPanel Visibility="{Binding HasReturnBooleanSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedReturnBoolean.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <CheckBox Content="Return true"
+                                      IsChecked="{Binding SelectedReturnBoolean.Value}"
+                                      Margin="0,0,0,10" />
+
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Last Return Boolean in a script sets its Boolean output. Wire the script node's bool port into an If condition on the Flow Graph." />
+                        </StackPanel>
+
+                        <!-- Flow graph node inspector -->
+                        <StackPanel Visibility="{Binding FlowGraphVm.HasRunScriptSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="Graph: Run Script"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+                            <TextBlock Text="Script" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                              <ComboBox ItemsSource="{Binding LibraryScripts}"
+                                      DisplayMemberPath="Name"
+                                      SelectedValuePath="Id"
+                                      SelectedValue="{Binding SelectedGraphNodeScriptId, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,10"
+                                      Padding="4" />
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Drag from next to sequence another node. Drag from bool onto an If cond port to supply the condition." />
+                        </StackPanel>
+
+                        <StackPanel Visibility="{Binding FlowGraphVm.HasIfSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="Graph: If"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Wire a script's bool output into cond. Then / else continue the graph when the condition is true or false." />
                         </StackPanel>
 
                         <!-- Mouse Move editor -->

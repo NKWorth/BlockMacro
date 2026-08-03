@@ -16,10 +16,13 @@ Place new code in the matching layer:
 
 Rules:
 
+- Prefer extending the matching base (`ActionBlock` / `EventBlock` / `FlowBlock`)
+- Graph orchestration lives in `Models/Graph`; Run prefers non-empty `MacroScript.FlowGraph`
+- Boolean outputs: `ReturnBooleanBlock`; If nodes consume Condition edges from RunScript nodes
+- Nested bodies: `IBlockContainer`; event slots: `IEventSlotHost`
+- Use `BlockTree` + interfaces instead of hard-coding containers
 - Namespace matches folder under Models, Services, Ui
-- Extend existing bases/interfaces; register JSON discriminators on `MacroBlock`
-- Use `BlockTree` + `IBlockContainer` / `IEventSlotHost` instead of hard-coding containers
 - Do not add new types to the project root
-- Prefer extracting collaborators over growing `MainViewModel` / `MainWindow`
+- Prefer extracting collaborators (`FlowGraphViewModel`) over growing `MainViewModel` / `MainWindow`
 
 See `AGENTS.md` for the full layout table.

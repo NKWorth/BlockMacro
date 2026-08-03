@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
+using MacroBlocks.Models.Graph;
 
 namespace MacroBlocks.Ui.Converters;
 
@@ -43,6 +44,39 @@ public sealed class NullToVisibilityConverter : IValueConverter
         var visible = VisibleWhenNull ? isNull : !isNull;
         return visible ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+public sealed class BoolToFontWeightConverter : IValueConverter
+{
+    public static BoolToFontWeightConverter Instance { get; } = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? FontWeights.SemiBold : FontWeights.Normal;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+public sealed class IfKindVisibilityConverter : IValueConverter
+{
+    public static IfKindVisibilityConverter Instance { get; } = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is FlowGraphNodeKind.If ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+public sealed class RunScriptKindVisibilityConverter : IValueConverter
+{
+    public static RunScriptKindVisibilityConverter Instance { get; } = new();
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is FlowGraphNodeKind.RunScript ? Visibility.Visible : Visibility.Collapsed;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();

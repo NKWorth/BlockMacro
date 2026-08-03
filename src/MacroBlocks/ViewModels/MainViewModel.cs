@@ -26,6 +26,7 @@ public sealed class MainViewModel : ViewModelBase
     private string _keyPressKeyText = "A";
     private string _scriptName = "Untitled Macro";
     private string? _selectedPaletteKind;
+    private bool _showFlowGraph;
 
     public MainViewModel()
         : this(new JsonScriptLibrary())
@@ -77,28 +78,41 @@ public sealed class MainViewModel : ViewModelBase
             Application.Current.Dispatcher.Invoke(() => Status = message);
         };
 
+        FlowGraphVm = new FlowGraphViewModel(
+            CanEditScript,
+            Mutate,
+            s => Status = s,
+            () => OnPropertyChanged(nameof(SelectedGraphNodeScriptId)));
+        FlowGraphVm.Attach(_script.FlowGraph);
+
         SelectPaletteCommand = new RelayCommand(
             p => SelectPaletteKind(p as string),
             _ => CanEditScript());
         InsertPaletteDraftCommand = new RelayCommand(InsertPaletteDraft, () => CanEditScript() && IsPaletteDraft);
         RemoveSelectedCommand = new RelayCommand(
             RemoveSelected,
-            () => CanEditScript() && SelectedBlock is not null && BlockTree.TryLocate(Blocks, SelectedBlock, out _));
+            () => CanEditScript() && (
+                (SelectedBlock is not null && BlockTree.TryLocate(Blocks, SelectedBlock, out _))
+                || (ShowFlowGraph && (FlowGraphVm.SelectedNode is not null || FlowGraphVm.SelectedEdge is not null))));
         MoveUpCommand = new RelayCommand(MoveUp, () => CanEditScript() && CanMoveSelected(-1));
         MoveDownCommand = new RelayCommand(MoveDown, () => CanEditScript() && CanMoveSelected(1));
-        ClearCommand = new RelayCommand(Clear, () => CanEditScript() && Blocks.Count > 0);
-        RunCommand = new RelayCommand(async () => await RunAsync(), () => !IsRunning && !IsRecordingLocation && Blocks.Count > 0);
+        ClearCommand = new RelayCommand(Clear, () => CanEditScript() && (Blocks.Count > 0 || FlowGraph.HasNodes));
+        RunCommand = new RelayCommand(
+            async () => await RunAsync(),
+            () => !IsRunning && !IsRecordingLocation && (Blocks.Count > 0 || FlowGraph.HasNodes));
         StopCommand = new RelayCommand(Stop, () => IsRunning);
         RecordMouseMoveLocationCommand = new RelayCommand(
             async () => await RecordMouseMoveLocationAsync(),
             () => !IsRunning && !IsRecordingLocation && SelectedMouseMove is not null);
         CancelRecordLocationCommand = new RelayCommand(CancelRecordLocation, () => IsRecordingLocation);
         NewScriptCommand = new RelayCommand(NewScript, CanEditScript);
-        SaveScriptCommand = new RelayCommand(SaveScript, () => CanEditScript() && Blocks.Count > 0);
+        SaveScriptCommand = new RelayCommand(SaveScript, () => CanEditScript() && (Blocks.Count > 0 || FlowGraph.HasNodes));
         OpenLibraryScriptCommand = new RelayCommand(OpenLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
         DeleteLibraryScriptCommand = new RelayCommand(DeleteLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
         UndoCommand = new RelayCommand(Undo, () => CanEditScript() && _history.CanUndo);
         RedoCommand = new RelayCommand(Redo, () => CanEditScript() && _history.CanRedo);
+        ShowScriptViewCommand = new RelayCommand(() => ShowFlowGraph = false);
+        ShowGraphViewCommand = new RelayCommand(() => ShowFlowGraph = true);
 
         RefreshLibrary();
     }
@@ -106,6 +120,48 @@ public sealed class MainViewModel : ViewModelBase
     public MacroScript Script => _script;
 
     public ObservableCollection<MacroBlock> Blocks => _script.Blocks;
+
+    public FlowGraph FlowGraph => _script.FlowGraph;
+
+    public FlowGraphViewModel FlowGraphVm { get; }
+
+    public bool ShowFlowGraph
+    {
+        get => _showFlowGraph;
+        set
+        {
+            if (SetProperty(ref _showFlowGraph, value))
+            {
+                OnPropertyChanged(nameof(ShowScriptEditor));
+            }
+        }
+    }
+
+    public bool ShowScriptEditor => !ShowFlowGraph;
+
+    public Guid? SelectedGraphNodeScriptId
+    {
+        get => FlowGraphVm.SelectedNode?.ScriptId;
+        set
+        {
+            if (FlowGraphVm.SelectedNode is null
+                || FlowGraphVm.SelectedNode.Kind != FlowGraphNodeKind.RunScript)
+            {
+                return;
+            }
+
+            if (FlowGraphVm.SelectedNode.ScriptId == value)
+            {
+                return;
+            }
+
+            var script = value is { } id
+                ? LibraryScripts.FirstOrDefault(s => s.Id == id)
+                : null;
+            FlowGraphVm.AssignSelectedNodeScript(script);
+            OnPropertyChanged();
+        }
+    }
 
     public ObservableCollection<EventBlock> AvailableEvents { get; }
 
@@ -193,6 +249,9 @@ public sealed class MainViewModel : ViewModelBase
 
     public DelayBlock? SelectedDelay => SelectedBlock as DelayBlock;
     public bool HasDelaySelection => SelectedDelay is not null;
+
+    public ReturnBooleanBlock? SelectedReturnBoolean => SelectedBlock as ReturnBooleanBlock;
+    public bool HasReturnBooleanSelection => SelectedReturnBoolean is not null;
 
     public KeyPressBlock? SelectedKeyPress => SelectedBlock as KeyPressBlock;
     public bool HasKeyPressSelection => SelectedKeyPress is not null;
@@ -359,6 +418,8 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand DeleteLibraryScriptCommand { get; }
     public ICommand UndoCommand { get; }
     public ICommand RedoCommand { get; }
+    public ICommand ShowScriptViewCommand { get; }
+    public ICommand ShowGraphViewCommand { get; }
 
     private bool CanEditScript() => !IsRunning && !IsRecordingLocation;
 
@@ -370,6 +431,8 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasMouseClickSelection));
         OnPropertyChanged(nameof(SelectedDelay));
         OnPropertyChanged(nameof(HasDelaySelection));
+        OnPropertyChanged(nameof(SelectedReturnBoolean));
+        OnPropertyChanged(nameof(HasReturnBooleanSelection));
         OnPropertyChanged(nameof(SelectedKeyPress));
         OnPropertyChanged(nameof(HasKeyPressSelection));
         OnPropertyChanged(nameof(SelectedKeyPressEvent));
@@ -472,6 +535,14 @@ public sealed class MainViewModel : ViewModelBase
 
     private void RemoveSelected()
     {
+        if (ShowFlowGraph
+            && (FlowGraphVm.SelectedNode is not null || FlowGraphVm.SelectedEdge is not null)
+            && FlowGraphVm.DeleteSelectionCommand.CanExecute(null))
+        {
+            FlowGraphVm.DeleteSelectionCommand.Execute(null);
+            return;
+        }
+
         if (SelectedBlock is null || !BlockTree.TryLocate(Blocks, SelectedBlock, out var location))
         {
             return;
@@ -533,7 +604,11 @@ public sealed class MainViewModel : ViewModelBase
     private void Clear() => Mutate(() =>
     {
         Blocks.Clear();
+        FlowGraph.Nodes.Clear();
+        FlowGraph.Edges.Clear();
         SelectedBlock = null;
+        FlowGraphVm.SelectNode(null);
+        FlowGraphVm.RebuildEdgeVisuals();
     });
 
     private void NewScript()
@@ -578,7 +653,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private void SaveScript()
     {
-        if (Blocks.Count == 0)
+        if (Blocks.Count == 0 && !FlowGraph.HasNodes)
         {
             return;
         }
@@ -590,6 +665,7 @@ public sealed class MainViewModel : ViewModelBase
         RefreshLibrary();
         SelectedLibraryScript = LibraryScripts.FirstOrDefault(s => s.Id == _script.Id);
         SyncRunSubscriptLabels();
+        FlowGraphVm.SyncScriptLabels(LibraryScripts);
         Status = $"Saved '{_script.Name}' to library";
     }
 
@@ -654,6 +730,7 @@ public sealed class MainViewModel : ViewModelBase
         _trackedBlocks.Clear();
         _script = script;
         EnsureTreeSubscriptions(_script.Blocks);
+        FlowGraphVm.Attach(_script.FlowGraph);
 
         _scriptName = _script.Name;
         _loopForever = _script.LoopForever;
@@ -662,6 +739,7 @@ public sealed class MainViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(Script));
         OnPropertyChanged(nameof(Blocks));
+        OnPropertyChanged(nameof(FlowGraph));
         OnPropertyChanged(nameof(ScriptName));
         OnPropertyChanged(nameof(LoopForever));
 
@@ -670,6 +748,7 @@ public sealed class MainViewModel : ViewModelBase
             RefreshAvailableEvents();
             SyncContinueUntilLabels();
             SyncRunSubscriptLabels();
+            FlowGraphVm.SyncScriptLabels(LibraryScripts);
         }
 
         if (resetHistory)
@@ -698,19 +777,20 @@ public sealed class MainViewModel : ViewModelBase
             : null;
 
         SyncRunSubscriptLabels();
+        FlowGraphVm.SyncScriptLabels(LibraryScripts);
         OnPropertyChanged(nameof(SelectedRunSubscriptId));
     }
 
     private async Task RunAsync()
     {
-        if (Blocks.Count == 0)
+        if (Blocks.Count == 0 && !FlowGraph.HasNodes)
         {
             return;
         }
 
         _script.LoopForever = LoopForever;
         _script.Name = ScriptName;
-        Status = "Starting…";
+        Status = FlowGraph.HasNodes ? "Starting flow graph…" : "Starting…";
 
         try
         {
@@ -1027,6 +1107,7 @@ public sealed class MainViewModel : ViewModelBase
             "MouseMove" => new MouseMoveBlock { X = 200, Y = 200 },
             "MouseClick" => new MouseClickBlock { X = 100, Y = 100, Button = MacroBlocks.Models.Actions.MouseButton.Left },
             "KeyPress" => new KeyPressBlock { VirtualKey = 0x41, KeyLabel = "A" },
+            "ReturnBoolean" => new ReturnBooleanBlock { Value = true },
             "ContinueUntil" => new ContinueUntilBlock(),
             "RunSubscript" => new RunSubscriptBlock(),
             "KeyPressEvent" => new KeyPressEventBlock(),
@@ -1040,6 +1121,7 @@ public sealed class MainViewModel : ViewModelBase
             "MouseMove" => ("Mouse Move", "(200, 200) · instant"),
             "MouseClick" => ("Mouse Click", "Left @ (100, 100)"),
             "KeyPress" => ("Key Press", "A"),
+            "ReturnBoolean" => ("Return Boolean", "true"),
             "ContinueUntil" => ("Continue Until", "until (no event)"),
             "RunSubscript" => ("Run Subscript", "(no script)"),
             "KeyPressEvent" => ("Event: Press Key", "Press F"),

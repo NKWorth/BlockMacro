@@ -21,6 +21,15 @@ public partial class MainWindow : Window
     private string? _paletteDragKind;
     private FrameworkElement? _paletteDragSource;
 
+    private Point _libraryDragStart;
+    private bool _libraryDragPending;
+    private MacroScript? _libraryDragScript;
+
+    private Point _graphNodeDragStart;
+    private FlowGraphNode? _graphDraggingNode;
+    private Point _graphNodeOrigin;
+    private bool _graphNodeDragMoved;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -830,4 +839,252 @@ public partial class MainWindow : Window
 
     private bool CanDragEdit()
         => Vm is { IsRunning: false, IsRecordingLocation: false };
+
+    private void LibraryItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is null || !CanDragEdit())
+        {
+            return;
+        }
+
+        var item = FindDataContext<MacroScript>(e.OriginalSource as DependencyObject);
+        if (item is null)
+        {
+            return;
+        }
+
+        _libraryDragStart = e.GetPosition(null);
+        _libraryDragPending = true;
+        _libraryDragScript = item;
+    }
+
+    private void LibraryItem_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_libraryDragPending
+            || _libraryDragScript is null
+            || e.LeftButton != MouseButtonState.Pressed
+            || !HasDragMoved(_libraryDragStart, e.GetPosition(null)))
+        {
+            return;
+        }
+
+        _libraryDragPending = false;
+        var data = new DataObject(DragFormats.LibraryScript, _libraryDragScript);
+        DragDrop.DoDragDrop(sender as DependencyObject ?? this, data, DragDropEffects.Copy);
+        _libraryDragScript = null;
+    }
+
+    private void LibraryItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _libraryDragPending = false;
+        _libraryDragScript = null;
+    }
+
+    private void GraphCanvas_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DragFormats.LibraryScript)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void GraphCanvas_Drop(object sender, DragEventArgs e)
+    {
+        if (Vm is null
+            || !e.Data.GetDataPresent(DragFormats.LibraryScript)
+            || e.Data.GetData(DragFormats.LibraryScript) is not MacroScript script)
+        {
+            return;
+        }
+
+        var pos = e.GetPosition(GraphCanvas);
+        Vm.FlowGraphVm.AddScriptNode(script, pos.X - 80, pos.Y - 36);
+        e.Handled = true;
+    }
+
+    private void GraphCanvas_BackgroundDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource == GraphCanvas || e.OriginalSource == GraphScroll)
+        {
+            Vm?.FlowGraphVm.SelectNode(null);
+            Vm?.FlowGraphVm.SelectEdge(null);
+            Vm?.FlowGraphVm.CancelWire();
+        }
+    }
+
+    private void GraphCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (Vm is null)
+        {
+            return;
+        }
+
+        var pos = e.GetPosition(GraphCanvas);
+        if (Vm.FlowGraphVm.IsWiring)
+        {
+            Vm.FlowGraphVm.UpdateWireEnd(pos);
+        }
+
+        if (_graphDraggingNode is not null && e.LeftButton == MouseButtonState.Pressed)
+        {
+            var delta = pos - _graphNodeDragStart;
+            if (!_graphNodeDragMoved && delta.Length > 3)
+            {
+                _graphNodeDragMoved = true;
+            }
+
+            if (_graphNodeDragMoved)
+            {
+                Vm.FlowGraphVm.MoveNode(
+                    _graphDraggingNode,
+                    _graphNodeOrigin.X + delta.X,
+                    _graphNodeOrigin.Y + delta.Y);
+            }
+        }
+    }
+
+    private void GraphCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        EndGraphNodeDrag();
+    }
+
+    private void GraphNode_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is null || sender is not FrameworkElement fe || fe.DataContext is not FlowGraphNode node)
+        {
+            return;
+        }
+
+        // Port clicks handle wiring separately.
+        if (e.OriginalSource is FrameworkElement { Tag: string })
+        {
+            return;
+        }
+
+        Vm.FlowGraphVm.SelectNode(node);
+        ScriptPanel.Focus();
+
+        if (Vm.FlowGraphVm.IsWiring)
+        {
+            // Complete wire onto node body as Next/Then/Else target.
+            var port = node.Kind == FlowGraphNodeKind.If ? FlowGraphPort.Next : FlowGraphPort.Next;
+            Vm.FlowGraphVm.CompleteWire(node, port);
+            e.Handled = true;
+            return;
+        }
+
+        if (!CanDragEdit())
+        {
+            return;
+        }
+
+        _graphDraggingNode = node;
+        _graphNodeDragStart = e.GetPosition(GraphCanvas);
+        _graphNodeOrigin = new Point(node.X, node.Y);
+        _graphNodeDragMoved = false;
+        fe.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void GraphNode_MouseMove(object sender, MouseEventArgs e)
+    {
+        // Canvas-level move handles dragging while captured.
+    }
+
+    private void GraphNode_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe)
+        {
+            fe.ReleaseMouseCapture();
+        }
+
+        EndGraphNodeDrag();
+        e.Handled = true;
+    }
+
+    private void EndGraphNodeDrag()
+    {
+        if (Vm is null || _graphDraggingNode is null)
+        {
+            _graphDraggingNode = null;
+            return;
+        }
+
+        if (_graphNodeDragMoved)
+        {
+            var node = _graphDraggingNode;
+            var x = node.X;
+            var y = node.Y;
+            // Restore then mutate so undo captures the move.
+            node.X = _graphNodeOrigin.X;
+            node.Y = _graphNodeOrigin.Y;
+            Vm.FlowGraphVm.CheckpointMove(() =>
+            {
+                node.X = x;
+                node.Y = y;
+            });
+            Vm.FlowGraphVm.RebuildEdgeVisuals();
+        }
+
+        _graphDraggingNode = null;
+        _graphNodeDragMoved = false;
+    }
+
+    private void GraphPort_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is null
+            || sender is not FrameworkElement port
+            || port.Tag is not string tag
+            || FindDataContext<FlowGraphNode>(port) is not { } node)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        ScriptPanel.Focus();
+
+        if (tag == "ConditionIn")
+        {
+            if (Vm.FlowGraphVm.IsWiring)
+            {
+                Vm.FlowGraphVm.CompleteWire(node, FlowGraphPort.Condition);
+            }
+
+            return;
+        }
+
+        var outputPort = tag switch
+        {
+            "Next" => FlowGraphPort.Next,
+            "Condition" => FlowGraphPort.Condition,
+            "Then" => FlowGraphPort.Then,
+            "Else" => FlowGraphPort.Else,
+            _ => (FlowGraphPort?)null
+        };
+
+        if (outputPort is null)
+        {
+            return;
+        }
+
+        if (Vm.FlowGraphVm.IsWiring)
+        {
+            Vm.FlowGraphVm.CompleteWire(node, outputPort.Value);
+            return;
+        }
+
+        Vm.FlowGraphVm.BeginWire(node, outputPort.Value);
+    }
+
+    private void GraphEdge_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Vm is null || sender is not FrameworkElement fe || fe.DataContext is not GraphEdgeVisual visual)
+        {
+            return;
+        }
+
+        Vm.FlowGraphVm.SelectEdge(visual.Edge);
+        ScriptPanel.Focus();
+        e.Handled = true;
+    }
 }
