@@ -169,7 +169,12 @@
                                    Margin="0,8,0,6" />
                         <Button Content="Event: Press Key"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddKeyPressEventCommand}" />
+                                Command="{Binding AddKeyPressEventCommand}"
+                                Tag="KeyPressEvent"
+                                ToolTip="Click to add, or drag onto a Continue Until block to create and assign"
+                                PreviewMouseLeftButtonDown="PaletteEvent_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteEvent_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteEvent_PreviewMouseLeftButtonUp" />
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -249,11 +254,25 @@
                             </StackPanel>
                         </DockPanel>
 
-                        <ListBox ItemsSource="{Binding Blocks}"
+                        <ListBox x:Name="ScriptList"
+                                 ItemsSource="{Binding Blocks}"
                                  SelectedItem="{Binding SelectedBlock}"
                                  BorderThickness="0"
                                  Background="Transparent"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                 AllowDrop="True"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 PreviewMouseLeftButtonDown="ScriptList_PreviewMouseLeftButtonDown"
+                                 PreviewMouseMove="ScriptList_PreviewMouseMove"
+                                 PreviewMouseLeftButtonUp="ScriptList_PreviewMouseLeftButtonUp"
+                                 DragOver="ScriptList_DragOver"
+                                 Drop="ScriptList_Drop">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="AllowDrop" Value="True" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="#F8FAFC"
@@ -261,7 +280,8 @@
                                             BorderThickness="1"
                                             CornerRadius="4"
                                             Padding="10,8"
-                                            Margin="0,0,0,6">
+                                            Margin="0,0,0,6"
+                                            Cursor="SizeAll">
                                         <StackPanel>
                                             <TextBlock Text="{Binding DisplayName}"
                                                        FontWeight="SemiBold"
@@ -381,7 +401,7 @@
                                        Foreground="#6B7280"
                                        FontSize="11"
                                        LineHeight="16"
-                                       Text="Blocks between Continue Until and End Continue repeat until the selected event fires." />
+                                       Text="Blocks between Continue Until and End Continue repeat until the selected event fires. Drag an Event from the palette or script list onto this block to assign it." />
                         </StackPanel>
 
                         <!-- Run Subscript editor -->

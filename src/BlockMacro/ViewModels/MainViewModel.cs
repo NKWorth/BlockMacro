@@ -702,15 +702,100 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        if (evt is null)
+        AssignEventToContinueUntil(SelectedContinueUntil, evt);
+    }
+
+    public void ReorderBlock(MacroBlock block, int targetIndex)
+    {
+        if (!CanEditScript())
         {
-            SelectedContinueUntil.EventBlockId = null;
-            SelectedContinueUntil.EventLabel = "(no event)";
             return;
         }
 
-        SelectedContinueUntil.EventBlockId = evt.Id;
-        SelectedContinueUntil.EventLabel = evt.Name;
+        var from = Blocks.IndexOf(block);
+        if (from < 0)
+        {
+            return;
+        }
+
+        var to = Math.Clamp(targetIndex, 0, Blocks.Count - 1);
+        if (from == to)
+        {
+            return;
+        }
+
+        Blocks.Move(from, to);
+        SelectedBlock = block;
+        Status = "Reordered block";
+    }
+
+    public void ReorderBlockRelative(MacroBlock block, MacroBlock relativeTo, bool insertAfter)
+    {
+        if (!CanEditScript())
+        {
+            return;
+        }
+
+        var from = Blocks.IndexOf(block);
+        var relativeIndex = Blocks.IndexOf(relativeTo);
+        if (from < 0 || relativeIndex < 0 || ReferenceEquals(block, relativeTo))
+        {
+            return;
+        }
+
+        var to = insertAfter ? relativeIndex + 1 : relativeIndex;
+        if (from < to)
+        {
+            to--;
+        }
+
+        ReorderBlock(block, to);
+    }
+
+    public void AssignEventToContinueUntil(ContinueUntilBlock flow, EventBlock? evt)
+    {
+        if (!CanEditScript())
+        {
+            return;
+        }
+
+        if (evt is null)
+        {
+            flow.EventBlockId = null;
+            flow.EventLabel = "(no event)";
+            Status = "Cleared Continue Until event";
+            return;
+        }
+
+        flow.EventBlockId = evt.Id;
+        flow.EventLabel = evt.Name;
+        SelectedBlock = flow;
+        Status = $"Assigned '{evt.Name}' to Continue Until";
+    }
+
+    /// <summary>
+    /// Creates a Press Key event from the palette and assigns it to a Continue Until block.
+    /// </summary>
+    public void DropPaletteKeyPressEventOnto(ContinueUntilBlock flow)
+    {
+        if (!CanEditScript())
+        {
+            return;
+        }
+
+        var evt = new KeyPressEventBlock();
+        var flowIndex = Blocks.IndexOf(flow);
+        if (flowIndex < 0)
+        {
+            Blocks.Add(evt);
+        }
+        else
+        {
+            Blocks.Insert(flowIndex, evt);
+        }
+
+        AssignEventToContinueUntil(flow, evt);
+        Status = $"Created and assigned '{evt.Name}' to Continue Until";
     }
 
     private void SelectRunSubscript(MacroScript? script)
