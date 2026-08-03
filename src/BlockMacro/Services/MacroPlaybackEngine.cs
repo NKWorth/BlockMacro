@@ -275,7 +275,8 @@ public sealed class MacroPlaybackEngine
                 break;
 
             case MouseMoveBlock move:
-                _input.MoveMouse(move.X, move.Y);
+                await _input.MoveMouseAsync(move.X, move.Y, move.DurationMilliseconds, token)
+                    .ConfigureAwait(false);
                 break;
 
             case MouseClickBlock click:

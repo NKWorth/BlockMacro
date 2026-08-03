@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using BlockMacro.Models;
 using BlockMacro.Native;
 
@@ -8,9 +9,51 @@ namespace BlockMacro.Services;
 /// </summary>
 public sealed class Win32InputSimulator : IInputSimulator
 {
+    private const int LerpStepMilliseconds = 8;
+
     public void MoveMouse(int x, int y)
     {
         Send(CreateMouseMove(x, y));
+    }
+
+    public async Task MoveMouseAsync(
+        int x,
+        int y,
+        int durationMilliseconds,
+        CancellationToken cancellationToken = default)
+    {
+        if (durationMilliseconds <= 0)
+        {
+            MoveMouse(x, y);
+            return;
+        }
+
+        if (!NativeMethods.GetCursorPos(out var start))
+        {
+            MoveMouse(x, y);
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var t = Math.Clamp(sw.Elapsed.TotalMilliseconds / durationMilliseconds, 0.0, 1.0);
+            var currentX = (int)Math.Round(start.X + (x - start.X) * t);
+            var currentY = (int)Math.Round(start.Y + (y - start.Y) * t);
+            MoveMouse(currentX, currentY);
+
+            if (t >= 1.0)
+            {
+                break;
+            }
+
+            await Task.Delay(LerpStepMilliseconds, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Guarantee the exact target after the last interpolated frame.
+        MoveMouse(x, y);
     }
 
     public void Click(int x, int y, MouseButton button, int clickCount)

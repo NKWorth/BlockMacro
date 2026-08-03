@@ -309,6 +309,12 @@
 
                             <TextBlock Text="Y" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
                             <TextBox Text="{Binding SelectedMouseMove.Y, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4"
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+
+                            <TextBlock Text="Duration (ms)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseMove.DurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,14"
                                      Padding="6,4"
                                      IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
@@ -329,7 +335,7 @@
                                        Foreground="#6B7280"
                                        FontSize="11"
                                        LineHeight="16"
-                                       Text="Enter coordinates manually, or record by clicking anywhere on screen. Esc cancels recording." />
+                                       Text="Duration 0 jumps instantly. Any positive value lerps from the current cursor position to the target over that many milliseconds." />
                         </StackPanel>
 
                         <!-- Press Key event editor -->
