@@ -109,34 +109,59 @@
         <!-- Body -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="210" />
                 <ColumnDefinition Width="16" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="240" />
+                <ColumnDefinition Width="260" />
             </Grid.ColumnDefinitions>
 
             <!-- Block palette -->
             <Border Grid.Column="0" Style="{StaticResource PanelCard}">
-                <DockPanel>
-                    <TextBlock DockPanel.Dock="Top"
-                               Text="Add Block"
-                               Style="{StaticResource SectionTitle}" />
-                    <StackPanel>
-                        <Button Content="Delay"
-                                Style="{StaticResource ToolButton}"
-                                Command="{Binding AddDelayCommand}" />
-                        <Button Content="Mouse Move"
-                                Style="{StaticResource ToolButton}"
-                                Command="{Binding AddMouseMoveCommand}" />
-                        <Button Content="Mouse Click"
-                                Style="{StaticResource ToolButton}"
-                                Command="{Binding AddMouseClickCommand}" />
-                        <Button Content="Key Press"
-                                Style="{StaticResource ToolButton}"
-                                Command="{Binding AddKeyPressCommand}" />
-                    </StackPanel>
-                </DockPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="Add Block"
+                                   Style="{StaticResource SectionTitle}" />
+                        <StackPanel>
+                            <TextBlock Text="Actions"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#6B7280"
+                                       Margin="0,0,0,6" />
+                            <Button Content="Delay"
+                                    Style="{StaticResource ToolButton}"
+                                    Command="{Binding AddDelayCommand}" />
+                            <Button Content="Mouse Move"
+                                    Style="{StaticResource ToolButton}"
+                                    Command="{Binding AddMouseMoveCommand}" />
+                            <Button Content="Mouse Click"
+                                    Style="{StaticResource ToolButton}"
+                                    Command="{Binding AddMouseClickCommand}" />
+                            <Button Content="Key Press"
+                                    Style="{StaticResource ToolButton}"
+                                    Command="{Binding AddKeyPressCommand}" />
+
+                            <TextBlock Text="Flow"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#6B7280"
+                                       Margin="0,8,0,6" />
+                            <Button Content="Continue Until"
+                                    Style="{StaticResource ToolButton}"
+                                    Command="{Binding AddContinueUntilCommand}" />
+
+                            <TextBlock Text="Events"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#6B7280"
+                                       Margin="0,8,0,6" />
+                            <Button Content="Event: Press Key"
+                                    Style="{StaticResource ToolButton}"
+                                    Command="{Binding AddKeyPressEventCommand}" />
+                        </StackPanel>
+                    </DockPanel>
+                </ScrollViewer>
             </Border>
 
             <!-- Script sequence -->
@@ -266,6 +291,61 @@
                                    FontSize="11"
                                    LineHeight="16"
                                    Text="Enter coordinates manually, or record by clicking anywhere on screen. Esc cancels recording." />
+                    </StackPanel>
+
+                    <!-- Press Key event editor -->
+                    <StackPanel Visibility="{Binding HasKeyPressEventSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <TextBlock Text="{Binding SelectedKeyPressEvent.DisplayName}"
+                                   FontWeight="SemiBold"
+                                   Foreground="#111827"
+                                   Margin="0,0,0,12" />
+
+                        <TextBlock Text="Name"
+                                   FontSize="11"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding SelectedKeyPressEvent.Name, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,10"
+                                 Padding="6,4" />
+
+                        <TextBlock Text="Key"
+                                   FontSize="11"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding KeyPressEventKeyText, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,10"
+                                 Padding="6,4" />
+
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="#6B7280"
+                                   FontSize="11"
+                                   LineHeight="16"
+                                   Text="While the script runs, pressing this key flips the event flag. Use it with Continue Until. Letters, digits, Esc, Space, Enter, Tab, F1–F12." />
+                    </StackPanel>
+
+                    <!-- Continue Until editor -->
+                    <StackPanel Visibility="{Binding HasContinueUntilSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <TextBlock Text="{Binding SelectedContinueUntil.DisplayName}"
+                                   FontWeight="SemiBold"
+                                   Foreground="#111827"
+                                   Margin="0,0,0,12" />
+
+                        <TextBlock Text="Until event"
+                                   FontSize="11"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,4" />
+                        <ComboBox ItemsSource="{Binding AvailableEvents}"
+                                  DisplayMemberPath="Name"
+                                  SelectedValuePath="Id"
+                                  SelectedValue="{Binding SelectedContinueUntilEventId, UpdateSourceTrigger=PropertyChanged}"
+                                  Margin="0,0,0,10"
+                                  Padding="4" />
+
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="#6B7280"
+                                   FontSize="11"
+                                   LineHeight="16"
+                                   Text="Blocks between Continue Until and End Continue repeat until the selected event fires." />
                     </StackPanel>
                 </DockPanel>
             </Border>
