@@ -1,0 +1,537 @@
+<Window x:Class="MacroBlocks.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:MacroBlocks.ViewModels"
+        xmlns:models="clr-namespace:MacroBlocks.Models"
+        xmlns:local="clr-namespace:MacroBlocks"
+        mc:Ignorable="d"
+        Title="MacroBlocks"
+        Height="720"
+        Width="1100"
+        MinHeight="520"
+        MinWidth="900"
+        Background="#F3F4F6"
+        WindowStartupLocation="CenterScreen">
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+
+    <Window.Resources>
+        <Style x:Key="PanelCard" TargetType="Border">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#D1D5DB" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="12" />
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#F9FAFB" />
+            <Setter Property="BorderBrush" Value="#D1D5DB" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Background" Value="#2563EB" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#1D4ED8" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
+
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Background" Value="#DC2626" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#B91C1C" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0" />
+        </Style>
+
+        <Style x:Key="SmallButton" TargetType="Button">
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Background" Value="#F9FAFB" />
+            <Setter Property="BorderBrush" Value="#D1D5DB" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <DataTemplate x:Key="DefaultBlockTemplate">
+            <Border Tag="BlockChrome"
+                    Margin="0,0,0,6"
+                    BorderBrush="#E5E7EB"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="10,8"
+                    Cursor="SizeAll"
+                    PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="BlockItem_PreviewMouseMove"
+                    PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
+                <Border.Background>
+                    <MultiBinding Converter="{x:Static local:SelectedBlockBackgroundConverter.Instance}">
+                        <Binding />
+                        <Binding Path="DataContext.SelectedBlock"
+                                 RelativeSource="{RelativeSource AncestorType=Window}" />
+                    </MultiBinding>
+                </Border.Background>
+                <StackPanel>
+                    <TextBlock Text="{Binding DisplayName}"
+                               FontWeight="SemiBold"
+                               Foreground="#111827" />
+                    <TextBlock Text="{Binding Summary}"
+                               Foreground="#6B7280"
+                               FontSize="12"
+                               Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ContinueUntilBlockTemplate">
+            <Border Tag="FlowChrome"
+                    Margin="0,0,0,8"
+                    BorderBrush="#93C5FD"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Background="#EFF6FF"
+                    PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="BlockItem_PreviewMouseMove"
+                    PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top"
+                            Padding="10,8"
+                            Cursor="SizeAll"
+                            Background="Transparent"
+                            AllowDrop="True"
+                            DragOver="FlowHeader_DragOver"
+                            Drop="FlowHeader_Drop">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#1E3A8A" />
+                            <TextBlock Text="{Binding Summary}"
+                                       Foreground="#3B82F6"
+                                       FontSize="12"
+                                       Margin="0,2,0,0" />
+                            <TextBlock Text="Drop an event here to assign · body below"
+                                       Foreground="#93C5FD"
+                                       FontSize="10"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="14,0,8,8"
+                            Padding="8"
+                            MinHeight="48"
+                            Background="#F8FAFC"
+                            BorderBrush="#BFDBFE"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            AllowDrop="True"
+                            DragOver="FlowBody_DragOver"
+                            Drop="FlowBody_Drop">
+                        <Grid>
+                            <TextBlock Text="Drop blocks here"
+                                       Foreground="#93C5FD"
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Children.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <ItemsControl ItemsSource="{Binding Children}"
+                                          ItemTemplateSelector="{DynamicResource BlockTemplateSelector}" />
+                        </Grid>
+                    </Border>
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+
+        <local:BlockTemplateSelector x:Key="BlockTemplateSelector"
+                                     DefaultTemplate="{StaticResource DefaultBlockTemplate}"
+                                     ContinueUntilTemplate="{StaticResource ContinueUntilBlockTemplate}" />
+    </Window.Resources>
+
+    <DockPanel Margin="16">
+        <!-- Header -->
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,14">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="MacroBlocks"
+                           FontSize="22"
+                           FontWeight="Bold"
+                           Foreground="#0F172A"
+                           VerticalAlignment="Center" />
+                <TextBlock Text="Blocks · Subscripts · Events"
+                           Margin="14,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="#6B7280"
+                           FontSize="13" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <CheckBox Content="Loop forever"
+                          IsChecked="{Binding LoopForever}"
+                          VerticalAlignment="Center"
+                          Margin="0,0,16,0"
+                          IsEnabled="{Binding IsRunning, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+                <Button Content="Run"
+                        Style="{StaticResource PrimaryButton}"
+                        Command="{Binding RunCommand}"
+                        Width="88"
+                        Margin="0,0,8,0" />
+                <Button Content="Stop"
+                        Style="{StaticResource DangerButton}"
+                        Command="{Binding StopCommand}"
+                        Width="88" />
+            </StackPanel>
+        </DockPanel>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom"
+                Background="#E5E7EB"
+                CornerRadius="4"
+                Padding="10,8"
+                Margin="0,14,0,0">
+            <TextBlock Text="{Binding Status}"
+                       Foreground="#374151"
+                       FontSize="12" />
+        </Border>
+
+        <!-- Body -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="210" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="280" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Block palette -->
+            <Border Grid.Column="0" Style="{StaticResource PanelCard}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Add Block"
+                                   Style="{StaticResource SectionTitle}" />
+
+                        <TextBlock Text="Actions"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,6" />
+                        <Button Content="Delay"
+                                Style="{StaticResource ToolButton}"
+                                Tag="Delay"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddDelayCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                        <Button Content="Mouse Move"
+                                Style="{StaticResource ToolButton}"
+                                Tag="MouseMove"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddMouseMoveCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                        <Button Content="Mouse Click"
+                                Style="{StaticResource ToolButton}"
+                                Tag="MouseClick"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddMouseClickCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                        <Button Content="Key Press"
+                                Style="{StaticResource ToolButton}"
+                                Tag="KeyPress"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddKeyPressCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+
+                        <TextBlock Text="Flow"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#6B7280"
+                                   Margin="0,8,0,6" />
+                        <Button Content="Continue Until"
+                                Style="{StaticResource ToolButton}"
+                                Tag="ContinueUntil"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddContinueUntilCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                        <Button Content="Run Subscript"
+                                Style="{StaticResource ToolButton}"
+                                Tag="RunSubscript"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddRunSubscriptCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+
+                        <TextBlock Text="Events"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#6B7280"
+                                   Margin="0,8,0,6" />
+                        <Button Content="Event: Press Key"
+                                Style="{StaticResource ToolButton}"
+                                Tag="KeyPressEvent"
+                                ToolTip="Click to add, drag into the script, or drop on Continue Until to assign"
+                                Command="{Binding AddKeyPressEventCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Script sequence + library -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="16" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource PanelCard}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top"
+                                   Text="Library"
+                                   Style="{StaticResource SectionTitle}" />
+
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                            <Button Content="New"
+                                    Style="{StaticResource SmallButton}"
+                                    Command="{Binding NewScriptCommand}" />
+                            <Button Content="Save"
+                                    Style="{StaticResource SmallButton}"
+                                    Command="{Binding SaveScriptCommand}" />
+                            <Button Content="Open"
+                                    Style="{StaticResource SmallButton}"
+                                    Command="{Binding OpenLibraryScriptCommand}" />
+                            <Button Content="Delete"
+                                    Style="{StaticResource SmallButton}"
+                                    Command="{Binding DeleteLibraryScriptCommand}"
+                                    Margin="0" />
+                        </StackPanel>
+
+                        <ListBox ItemsSource="{Binding LibraryScripts}"
+                                 SelectedItem="{Binding SelectedLibraryScript}"
+                                 Height="110"
+                                 BorderBrush="#E5E7EB"
+                                 BorderThickness="1"
+                                 DisplayMemberPath="Name" />
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Row="2" Style="{StaticResource PanelCard}">
+                    <DockPanel>
+                        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="Script"
+                                           Style="{StaticResource SectionTitle}"
+                                           Margin="0,0,0,6" />
+                                <TextBox Text="{Binding ScriptName, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="6,4"
+                                         Width="220"
+                                         HorizontalAlignment="Left" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom">
+                                <Button Content="↑"
+                                        Width="32"
+                                        Margin="0,0,4,0"
+                                        Command="{Binding MoveUpCommand}"
+                                        ToolTip="Move up" />
+                                <Button Content="↓"
+                                        Width="32"
+                                        Margin="0,0,4,0"
+                                        Command="{Binding MoveDownCommand}"
+                                        ToolTip="Move down" />
+                                <Button Content="Remove"
+                                        Margin="0,0,4,0"
+                                        Padding="8,4"
+                                        Command="{Binding RemoveSelectedCommand}" />
+                                <Button Content="Clear"
+                                        Padding="8,4"
+                                        Command="{Binding ClearCommand}" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      AllowDrop="True"
+                                      DragOver="ScriptRoot_DragOver"
+                                      Drop="ScriptRoot_Drop"
+                                      DragLeave="ScriptRoot_DragLeave">
+                            <ItemsControl x:Name="ScriptList"
+                                          ItemsSource="{Binding Blocks}"
+                                          ItemTemplateSelector="{StaticResource BlockTemplateSelector}" />
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- Inspector -->
+            <Border Grid.Column="4" Style="{StaticResource PanelCard}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Inspector"
+                                   Style="{StaticResource SectionTitle}" />
+
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="#6B7280"
+                                   FontSize="12"
+                                   LineHeight="18"
+                                   Visibility="{Binding SelectedBlock, Converter={x:Static vm:NullToVisibilityConverter.WhenNull}}">
+                            Select a block to edit its properties.
+                        </TextBlock>
+
+                        <!-- Mouse Move editor -->
+                        <StackPanel Visibility="{Binding HasMouseMoveSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedMouseMove.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="X" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseMove.X, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4"
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+
+                            <TextBlock Text="Y" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseMove.Y, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4"
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+
+                            <TextBlock Text="Duration (ms)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseMove.DurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,14"
+                                     Padding="6,4"
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+
+                            <Button Content="Record Location"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Command="{Binding RecordMouseMoveLocationCommand}"
+                                    Margin="0,0,0,8"
+                                    Visibility="{Binding IsRecordingLocation, Converter={x:Static vm:BoolToVisibilityConverter.Inverted}}" />
+
+                            <Button Content="Cancel Recording"
+                                    Style="{StaticResource DangerButton}"
+                                    Command="{Binding CancelRecordLocationCommand}"
+                                    Margin="0,0,0,8"
+                                    Visibility="{Binding IsRecordingLocation, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}" />
+
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Duration 0 jumps instantly. Any positive value lerps from the current cursor position to the target over that many milliseconds." />
+                        </StackPanel>
+
+                        <!-- Press Key event editor -->
+                        <StackPanel Visibility="{Binding HasKeyPressEventSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedKeyPressEvent.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Name" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedKeyPressEvent.Name, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+
+                            <TextBlock Text="Key" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding KeyPressEventKeyText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="While the script runs, pressing this key flips the event flag. Use it with Continue Until." />
+                        </StackPanel>
+
+                        <!-- Continue Until editor -->
+                        <StackPanel Visibility="{Binding HasContinueUntilSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedContinueUntil.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Until event" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding AvailableEvents}"
+                                      DisplayMemberPath="Name"
+                                      SelectedValuePath="Id"
+                                      SelectedValue="{Binding SelectedContinueUntilEventId, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,10"
+                                      Padding="4" />
+
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Body blocks nest inside this flow. Drag blocks into or out of the indented area. Drop an event on the header to assign it." />
+                        </StackPanel>
+
+                        <!-- Run Subscript editor -->
+                        <StackPanel Visibility="{Binding HasRunSubscriptSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedRunSubscript.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Subscript" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding LibraryScripts}"
+                                      DisplayMemberPath="Name"
+                                      SelectedValuePath="Id"
+                                      SelectedValue="{Binding SelectedRunSubscriptId, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,10"
+                                      Padding="4" />
+
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Runs a saved library script inline. Save reusable sequences first, then call them from larger scripts." />
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>
