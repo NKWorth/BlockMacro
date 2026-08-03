@@ -45,6 +45,10 @@ public partial class MainWindow : Window
 
         Vm.SelectedBlock = block;
 
+        // Keep keyboard focus in the script panel so Delete can remove the selection
+        // without stealing Delete from inspector/name TextBoxes.
+        ScriptPanel.Focus();
+
         if (!CanDragEdit())
         {
             return;
@@ -55,6 +59,24 @@ public partial class MainWindow : Window
         _scriptDragSource = sender as FrameworkElement;
         _scriptDragPending = true;
     }
+
+    private void ScriptPanel_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete || IsTextInputFocused())
+        {
+            return;
+        }
+
+        if (Vm?.RemoveSelectedCommand.CanExecute(null) == true)
+        {
+            Vm.RemoveSelectedCommand.Execute(null);
+            e.Handled = true;
+            ScriptPanel.Focus();
+        }
+    }
+
+    private static bool IsTextInputFocused()
+        => Keyboard.FocusedElement is TextBox or PasswordBox or ComboBox { IsEditable: true };
 
     private void BlockItem_PreviewMouseMove(object sender, MouseEventArgs e)
     {

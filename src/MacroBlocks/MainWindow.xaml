@@ -354,7 +354,11 @@
                     </DockPanel>
                 </Border>
 
-                <Border Grid.Row="2" Style="{StaticResource PanelCard}">
+                <Border x:Name="ScriptPanel"
+                        Grid.Row="2"
+                        Style="{StaticResource PanelCard}"
+                        Focusable="True"
+                        PreviewKeyDown="ScriptPanel_PreviewKeyDown">
                     <DockPanel>
                         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                             <StackPanel>
