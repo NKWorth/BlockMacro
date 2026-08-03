@@ -1,6 +1,6 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Actions;
 
-public sealed class MouseMoveBlock : MacroBlock
+public sealed class MouseMoveBlock : ActionBlock
 {
     private int _x;
     private int _y;

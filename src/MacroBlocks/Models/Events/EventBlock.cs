@@ -1,4 +1,4 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Events;
 
 /// <summary>
 /// Declarative block that can raise a runtime flag while a script is running.

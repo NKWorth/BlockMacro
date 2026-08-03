@@ -1,12 +1,13 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
+using MacroBlocks.Models.Events;
 
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Flow;
 
 /// <summary>
 /// Loops nested body blocks until the slotted event flag is raised.
 /// </summary>
-public sealed class ContinueUntilBlock : MacroBlock
+public sealed class ContinueUntilBlock : FlowBlock, IBlockContainer, IEventSlotHost
 {
     private EventBlock? _eventSlot;
     private string _eventLabel = "(no event)";

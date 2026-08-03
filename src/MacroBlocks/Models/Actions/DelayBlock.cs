@@ -1,6 +1,6 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Actions;
 
-public sealed class DelayBlock : MacroBlock
+public sealed class DelayBlock : ActionBlock
 {
     private int _milliseconds = 500;
 

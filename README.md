@@ -19,7 +19,11 @@ dotnet run --project src\MacroBlocks\MacroBlocks.csproj
 
 ```
 src/MacroBlocks/
-  Models/          # Delay, MouseMove, MouseClick, KeyPress, events, flow, MacroScript
+  Models/
+    Actions/       # Delay, MouseMove, MouseClick, KeyPress (+ ActionBlock)
+    Events/        # EventBlock, KeyPressEventBlock
+    Flow/          # ContinueUntil, RunSubscript, EndContinue (+ FlowBlock)
+    MacroBlock, MacroScript, BlockTree, ScriptMigrator
   Services/        # Input simulator, playback engine, script library
   ViewModels/      # MainViewModel + commands
   Native/          # P/Invoke for user32 SendInput

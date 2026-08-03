@@ -1,4 +1,4 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Events;
 
 /// <summary>
 /// Flips a runtime flag when the user manually presses the configured key during playback.

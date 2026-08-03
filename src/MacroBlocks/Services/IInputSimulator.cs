@@ -1,4 +1,4 @@
-using MacroBlocks.Models;
+using MacroBlocks.Models.Actions;
 
 namespace MacroBlocks.Services;
 

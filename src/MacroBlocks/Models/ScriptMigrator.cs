@@ -1,4 +1,5 @@
-using System.Collections.ObjectModel;
+using MacroBlocks.Models.Events;
+using MacroBlocks.Models.Flow;
 
 namespace MacroBlocks.Models;
 
@@ -56,6 +57,13 @@ public static class ScriptMigrator
                     yield return nested;
                 }
             }
+            else if (block is IBlockContainer container)
+            {
+                foreach (var nested in EnumerateFlows(container.Children))
+                {
+                    yield return nested;
+                }
+            }
         }
     }
 
@@ -83,6 +91,11 @@ public static class ScriptMigrator
                 {
                     return true;
                 }
+            }
+            else if (blocks[i] is IBlockContainer container
+                     && TryRemoveEventById(container.Children, id, out evt))
+            {
+                return true;
             }
         }
 

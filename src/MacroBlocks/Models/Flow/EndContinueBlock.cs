@@ -1,9 +1,9 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Flow;
 
 /// <summary>
 /// Legacy marker kept for deserializing older scripts. Nested Children replace this in the UI.
 /// </summary>
-public sealed class EndContinueBlock : MacroBlock
+public sealed class EndContinueBlock : FlowBlock
 {
     public override string DisplayName => "End Continue";
 

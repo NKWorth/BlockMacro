@@ -1,13 +1,6 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Actions;
 
-public enum MouseButton
-{
-    Left,
-    Right,
-    Middle
-}
-
-public sealed class MouseClickBlock : MacroBlock
+public sealed class MouseClickBlock : ActionBlock
 {
     private int _x;
     private int _y;

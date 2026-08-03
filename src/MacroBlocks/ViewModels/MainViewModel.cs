@@ -229,7 +229,7 @@ public sealed class MainViewModel : ViewModelBase
         && SelectedBlock is not null
         && !BlockTree.TryLocate(Blocks, SelectedBlock, out _);
 
-    public Array MouseButtonOptions { get; } = Enum.GetValues(typeof(Models.MouseButton));
+    public Array MouseButtonOptions { get; } = Enum.GetValues(typeof(MacroBlocks.Models.Actions.MouseButton));
 
     public Guid? SelectedContinueUntilEventId
     {
@@ -1027,7 +1027,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             "Delay" => new DelayBlock { Milliseconds = 500 },
             "MouseMove" => new MouseMoveBlock { X = 200, Y = 200 },
-            "MouseClick" => new MouseClickBlock { X = 100, Y = 100, Button = Models.MouseButton.Left },
+            "MouseClick" => new MouseClickBlock { X = 100, Y = 100, Button = MacroBlocks.Models.Actions.MouseButton.Left },
             "KeyPress" => new KeyPressBlock { VirtualKey = 0x41, KeyLabel = "A" },
             "ContinueUntil" => new ContinueUntilBlock(),
             "RunSubscript" => new RunSubscriptBlock(),

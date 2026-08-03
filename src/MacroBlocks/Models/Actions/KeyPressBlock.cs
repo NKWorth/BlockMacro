@@ -1,6 +1,6 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Actions;
 
-public sealed class KeyPressBlock : MacroBlock
+public sealed class KeyPressBlock : ActionBlock
 {
     private ushort _virtualKey;
     private string _keyLabel = "A";

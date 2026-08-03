@@ -1,9 +1,9 @@
-namespace MacroBlocks.Models;
+namespace MacroBlocks.Models.Flow;
 
 /// <summary>
 /// Executes another saved script inline as a reusable subroutine.
 /// </summary>
-public sealed class RunSubscriptBlock : MacroBlock
+public sealed class RunSubscriptBlock : FlowBlock
 {
     private Guid? _scriptId;
     private string _scriptName = "(no script)";

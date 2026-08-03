@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using MacroBlocks.Models.Events;
+using MacroBlocks.Models.Flow;
 
 namespace MacroBlocks.Models;
 
@@ -21,14 +23,15 @@ public static class BlockTree
         foreach (var block in blocks)
         {
             yield return block;
-            if (block is ContinueUntilBlock flow)
-            {
-                if (flow.EventSlot is not null)
-                {
-                    yield return flow.EventSlot;
-                }
 
-                foreach (var child in Enumerate(flow.Children))
+            if (block is IEventSlotHost slotHost && slotHost.EventSlot is not null)
+            {
+                yield return slotHost.EventSlot;
+            }
+
+            if (block is IBlockContainer container)
+            {
+                foreach (var child in Enumerate(container.Children))
                 {
                     yield return child;
                 }
@@ -51,9 +54,9 @@ public static class BlockTree
                 yield return evt;
             }
 
-            if (block is ContinueUntilBlock flow)
+            if (block is IBlockContainer container)
             {
-                foreach (var nested in EnumerateFreeEvents(flow.Children))
+                foreach (var nested in EnumerateFreeEvents(container.Children))
                 {
                     yield return nested;
                 }
@@ -77,18 +80,21 @@ public static class BlockTree
                 return true;
             }
 
-            if (root[i] is not ContinueUntilBlock flow)
+            if (root[i] is ContinueUntilBlock flow)
             {
-                continue;
-            }
+                if (ReferenceEquals(flow.EventSlot, block))
+                {
+                    location = new EventSlotLocation(flow);
+                    return true;
+                }
 
-            if (ReferenceEquals(flow.EventSlot, block))
-            {
-                location = new EventSlotLocation(flow);
-                return true;
+                if (TryLocate(flow.Children, block, out location!))
+                {
+                    return true;
+                }
             }
-
-            if (TryLocate(flow.Children, block, out location!))
+            else if (root[i] is IBlockContainer container
+                     && TryLocate(container.Children, block, out location!))
             {
                 return true;
             }
@@ -131,21 +137,21 @@ public static class BlockTree
         return false;
     }
 
-    public static bool ContainsBlock(ContinueUntilBlock flow, MacroBlock block)
+    public static bool ContainsBlock(IBlockContainer container, MacroBlock block)
     {
-        if (ReferenceEquals(flow.EventSlot, block))
+        if (container is IEventSlotHost host && ReferenceEquals(host.EventSlot, block))
         {
             return true;
         }
 
-        foreach (var child in flow.Children)
+        foreach (var child in container.Children)
         {
             if (ReferenceEquals(child, block))
             {
                 return true;
             }
 
-            if (child is ContinueUntilBlock nested && ContainsBlock(nested, block))
+            if (child is IBlockContainer nested && ContainsBlock(nested, block))
             {
                 return true;
             }
@@ -154,14 +160,14 @@ public static class BlockTree
         return false;
     }
 
-    public static bool IsOwnedBy(ObservableCollection<MacroBlock> collection, ContinueUntilBlock flow)
+    public static bool IsOwnedBy(ObservableCollection<MacroBlock> collection, IBlockContainer container)
     {
-        if (ReferenceEquals(collection, flow.Children))
+        if (ReferenceEquals(collection, container.Children))
         {
             return true;
         }
 
-        foreach (var child in flow.Children.OfType<ContinueUntilBlock>())
+        foreach (var child in container.Children.OfType<IBlockContainer>())
         {
             if (IsOwnedBy(collection, child))
             {
