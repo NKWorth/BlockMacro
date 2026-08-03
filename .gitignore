@@ -17,6 +17,9 @@ project.fragment.lock.json
 .vs/
 *.DotSettings.user
 
+## Cursor
+.cursor/
+
 ## OS
 Thumbs.db
 Desktop.ini
