@@ -717,7 +717,7 @@ public sealed class MainViewModel : ViewModelBase
 
         if (ReferenceEquals(sourceOwner, targetOwner))
         {
-            var to = Math.Clamp(targetIndex, 0, targetOwner.Count - 1);
+            var to = targetIndex;
             if (sourceIndex < to)
             {
                 to--;
@@ -758,6 +758,62 @@ public sealed class MainViewModel : ViewModelBase
         var targetIndex = insertAfter ? relativeIndex + 1 : relativeIndex;
         MoveBlockInto(block, targetOwner, targetIndex);
     }
+
+    public void InsertPaletteBlock(string kind, ObservableCollection<MacroBlock> owner, int index)
+    {
+        if (!CanEditScript())
+        {
+            return;
+        }
+
+        var block = CreatePaletteBlock(kind);
+        if (block is null)
+        {
+            return;
+        }
+
+        var insertAt = Math.Clamp(index, 0, owner.Count);
+        owner.Insert(insertAt, block);
+        if (block is ContinueUntilBlock flow)
+        {
+            EnsureTreeSubscriptions(flow.Children);
+            if (AvailableEvents.Count > 0)
+            {
+                var evt = AvailableEvents[0];
+                flow.EventBlockId = evt.Id;
+                flow.EventLabel = evt.Name;
+            }
+        }
+
+        SelectedBlock = block;
+        Status = $"Added {block.DisplayName}";
+    }
+
+    public static MacroBlock? CreatePaletteBlock(string kind)
+        => kind switch
+        {
+            "Delay" => new DelayBlock { Milliseconds = 500 },
+            "MouseMove" => new MouseMoveBlock { X = 200, Y = 200 },
+            "MouseClick" => new MouseClickBlock { X = 100, Y = 100, Button = Models.MouseButton.Left },
+            "KeyPress" => new KeyPressBlock { VirtualKey = 0x41, KeyLabel = "A" },
+            "ContinueUntil" => new ContinueUntilBlock(),
+            "RunSubscript" => new RunSubscriptBlock(),
+            "KeyPressEvent" => new KeyPressEventBlock(),
+            _ => null
+        };
+
+    public static (string Title, string Subtitle) DescribePaletteKind(string kind)
+        => kind switch
+        {
+            "Delay" => ("Delay", "500 ms"),
+            "MouseMove" => ("Mouse Move", "(200, 200) · instant"),
+            "MouseClick" => ("Mouse Click", "Left @ (100, 100)"),
+            "KeyPress" => ("Key Press", "A"),
+            "ContinueUntil" => ("Continue Until", "until (no event)"),
+            "RunSubscript" => ("Run Subscript", "(no script)"),
+            "KeyPressEvent" => ("Event: Press Key", "Press F"),
+            _ => (kind, string.Empty)
+        };
 
     public void AssignEventToContinueUntil(ContinueUntilBlock flow, EventBlock? evt)
     {

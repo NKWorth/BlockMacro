@@ -70,7 +70,8 @@
         </Style>
 
         <DataTemplate x:Key="DefaultBlockTemplate">
-            <Border Margin="0,0,0,6"
+            <Border Tag="BlockChrome"
+                    Margin="0,0,0,6"
                     BorderBrush="#E5E7EB"
                     BorderThickness="1"
                     CornerRadius="4"
@@ -99,20 +100,21 @@
         </DataTemplate>
 
         <DataTemplate x:Key="ContinueUntilBlockTemplate">
-            <Border Margin="0,0,0,8"
+            <Border Tag="FlowChrome"
+                    Margin="0,0,0,8"
                     BorderBrush="#93C5FD"
                     BorderThickness="1"
                     CornerRadius="6"
-                    Background="#EFF6FF">
+                    Background="#EFF6FF"
+                    PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="BlockItem_PreviewMouseMove"
+                    PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
                 <DockPanel>
                     <Border DockPanel.Dock="Top"
                             Padding="10,8"
                             Cursor="SizeAll"
                             Background="Transparent"
                             AllowDrop="True"
-                            PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
-                            PreviewMouseMove="BlockItem_PreviewMouseMove"
-                            PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp"
                             DragOver="FlowHeader_DragOver"
                             Drop="FlowHeader_Drop">
                         <StackPanel>
@@ -243,16 +245,36 @@
                                    Margin="0,0,0,6" />
                         <Button Content="Delay"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddDelayCommand}" />
+                                Tag="Delay"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddDelayCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Mouse Move"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddMouseMoveCommand}" />
+                                Tag="MouseMove"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddMouseMoveCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Mouse Click"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddMouseClickCommand}" />
+                                Tag="MouseClick"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddMouseClickCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Key Press"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddKeyPressCommand}" />
+                                Tag="KeyPress"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddKeyPressCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
 
                         <TextBlock Text="Flow"
                                    FontSize="11"
@@ -261,10 +283,20 @@
                                    Margin="0,8,0,6" />
                         <Button Content="Continue Until"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddContinueUntilCommand}" />
+                                Tag="ContinueUntil"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddContinueUntilCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Run Subscript"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddRunSubscriptCommand}" />
+                                Tag="RunSubscript"
+                                ToolTip="Click to add, or drag into the script"
+                                Command="{Binding AddRunSubscriptCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
 
                         <TextBlock Text="Events"
                                    FontSize="11"
@@ -273,12 +305,12 @@
                                    Margin="0,8,0,6" />
                         <Button Content="Event: Press Key"
                                 Style="{StaticResource ToolButton}"
-                                Command="{Binding AddKeyPressEventCommand}"
                                 Tag="KeyPressEvent"
-                                ToolTip="Click to add, or drag onto a Continue Until block to create and assign"
-                                PreviewMouseLeftButtonDown="PaletteEvent_PreviewMouseLeftButtonDown"
-                                PreviewMouseMove="PaletteEvent_PreviewMouseMove"
-                                PreviewMouseLeftButtonUp="PaletteEvent_PreviewMouseLeftButtonUp" />
+                                ToolTip="Click to add, drag into the script, or drop on Continue Until to assign"
+                                Command="{Binding AddKeyPressEventCommand}"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -361,7 +393,8 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
                                       AllowDrop="True"
                                       DragOver="ScriptRoot_DragOver"
-                                      Drop="ScriptRoot_Drop">
+                                      Drop="ScriptRoot_Drop"
+                                      DragLeave="ScriptRoot_DragLeave">
                             <ItemsControl x:Name="ScriptList"
                                           ItemsSource="{Binding Blocks}"
                                           ItemTemplateSelector="{StaticResource BlockTemplateSelector}" />
