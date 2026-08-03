@@ -8,6 +8,8 @@ namespace BlockMacro;
 
 /// <summary>
 /// Nudges items apart at the prospective drop index during a drag.
+/// Insert index is chosen from mouse Y against resting (un-nudged) slot positions
+/// so the gap itself does not fight hit-testing.
 /// </summary>
 internal sealed class InsertionGapController
 {
@@ -27,7 +29,7 @@ internal sealed class InsertionGapController
             return;
         }
 
-        Clear();
+        ClearVisualOnly();
         TargetOwner = owner;
         InsertIndex = Math.Clamp(insertIndex, 0, owner.Count);
         _activeList = list;
@@ -37,15 +39,110 @@ internal sealed class InsertionGapController
 
     public void Clear()
     {
-        if (_activeList is not null)
-        {
-            Reset(list: _activeList);
-        }
-
+        ClearVisualOnly();
         _activeList = null;
         _activeIndex = -1;
         TargetOwner = null;
         InsertIndex = -1;
+    }
+
+    /// <summary>
+    /// Picks the closest insertion slot to the pointer using resting geometry
+    /// (current layout with the active gap mathematically removed).
+    /// </summary>
+    public int ComputeInsertIndex(ItemsControl list, Point positionInList)
+    {
+        list.UpdateLayout();
+        var count = list.Items.Count;
+        if (count == 0)
+        {
+            return 0;
+        }
+
+        var slots = new double[count + 1];
+        var haveBounds = false;
+
+        for (var i = 0; i < count; i++)
+        {
+            if (!TryGetRestingBounds(list, i, out var top, out var bottom))
+            {
+                continue;
+            }
+
+            haveBounds = true;
+            if (i == 0)
+            {
+                slots[0] = top;
+            }
+
+            slots[i + 1] = bottom;
+
+            if (i > 0 && TryGetRestingBounds(list, i - 1, out _, out var prevBottom))
+            {
+                slots[i] = (prevBottom + top) / 2.0;
+            }
+        }
+
+        if (!haveBounds)
+        {
+            return count;
+        }
+
+        var mouseY = positionInList.Y;
+        var bestIndex = 0;
+        var bestDist = Math.Abs(mouseY - slots[0]);
+
+        for (var i = 1; i <= count; i++)
+        {
+            var dist = Math.Abs(mouseY - slots[i]);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private void ClearVisualOnly()
+    {
+        if (_activeList is not null)
+        {
+            Reset(_activeList);
+        }
+    }
+
+    private static bool TryGetRestingBounds(ItemsControl list, int index, out double top, out double bottom)
+    {
+        top = 0;
+        bottom = 0;
+
+        var chrome = FindChrome(list, index);
+        if (chrome is null)
+        {
+            return false;
+        }
+
+        Point origin;
+        try
+        {
+            origin = chrome.TransformToAncestor(list).Transform(new Point(0, 0));
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+
+        var baseMargin = GetBaseMargin(chrome);
+        var extraTop = Math.Max(0, chrome.Margin.Top - baseMargin.Top);
+        var extraBottom = Math.Max(0, chrome.Margin.Bottom - baseMargin.Bottom);
+
+        // Border Y is already after Margin.Top; undo gap so slots stay stable while nudging.
+        top = origin.Y - extraTop;
+        bottom = top + chrome.ActualHeight + baseMargin.Bottom;
+        _ = extraBottom; // bottom gap only stretches space below; resting block box ignores it
+        return true;
     }
 
     private static void Apply(ItemsControl list, int insertIndex)
@@ -98,7 +195,6 @@ internal sealed class InsertionGapController
 
     private static Thickness GetBaseMargin(FrameworkElement chrome)
     {
-        // Continue Until outer chrome uses 8 bottom; default blocks use 6.
         var bottom = chrome.Tag as string == "FlowChrome" ? 8d : 6d;
         return new Thickness(0, 0, 0, bottom);
     }

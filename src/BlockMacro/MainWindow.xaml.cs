@@ -259,28 +259,18 @@ public partial class MainWindow : Window
                 && (hasPalette || hasScript))
             {
                 var parentList = FindItemsControlForOwner(parentOwner) ?? ScriptList;
-                var insertIndex = ComputeInsertIndex(parentOwner, flow, e);
-                if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock moving
-                    && moving is ContinueUntilBlock movingFlow
-                    && BlockTree.IsOwnedBy(parentOwner, movingFlow)
-                    && !ReferenceEquals(moving, flow))
-                {
-                    // ok
-                }
-
                 if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock src
                     && src is ContinueUntilBlock mf
                     && (ReferenceEquals(src, flow) || BlockTree.ContainsBlock(mf, flow)))
                 {
                     e.Effects = DragDropEffects.None;
+                    _gaps.Clear();
                 }
-                else
+                else if (parentList is not null)
                 {
                     e.Effects = hasPalette ? DragDropEffects.Copy : DragDropEffects.Move;
-                    if (parentList is not null)
-                    {
-                        _gaps.Show(parentList, parentOwner, insertIndex);
-                    }
+                    var insertIndex = _gaps.ComputeInsertIndex(parentList, e.GetPosition(parentList));
+                    _gaps.Show(parentList, parentOwner, insertIndex);
                 }
             }
 
@@ -301,8 +291,8 @@ public partial class MainWindow : Window
             else
             {
                 e.Effects = hasPalette ? DragDropEffects.Copy : DragDropEffects.Move;
-                var insertIndex = ComputeInsertIndex(targetOwner, e);
                 var itemsControl = list ?? FindItemsControl(e.OriginalSource as DependencyObject) ?? ScriptList;
+                var insertIndex = _gaps.ComputeInsertIndex(itemsControl, e.GetPosition(itemsControl));
                 _gaps.Show(itemsControl, targetOwner, insertIndex);
             }
         }
@@ -346,7 +336,11 @@ public partial class MainWindow : Window
                 // Other palette/script drops on header → insert around the flow in its parent.
                 if (BlockTree.TryFindOwner(Vm.Blocks, flow, out var parentOwner, out _))
                 {
-                    var insertIndex = ComputeInsertIndex(parentOwner, flow, e);
+                    var parentList = FindItemsControlForOwner(parentOwner) ?? ScriptList;
+                    var insertIndex = parentList is not null
+                        ? _gaps.ComputeInsertIndex(parentList, e.GetPosition(parentList))
+                        : parentOwner.IndexOf(flow);
+
                     if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
                         && e.Data.GetData(DragFormats.PaletteBlockKind) is string paletteKind)
                     {
@@ -371,9 +365,17 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var index = _gaps.InsertIndex >= 0
-                ? _gaps.InsertIndex
-                : ComputeInsertIndex(targetOwner, e);
+            var list = FindItemsControlForOwner(targetOwner)
+                       ?? FindItemsControl(e.OriginalSource as DependencyObject)
+                       ?? ScriptList;
+            var index = list is not null
+                ? _gaps.ComputeInsertIndex(list, e.GetPosition(list))
+                : targetOwner.Count;
+
+            if (_gaps.InsertIndex >= 0 && ReferenceEquals(_gaps.TargetOwner, targetOwner))
+            {
+                index = _gaps.InsertIndex;
+            }
 
             if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
                 && e.Data.GetData(DragFormats.PaletteBlockKind) is string dropKind)
@@ -394,29 +396,6 @@ public partial class MainWindow : Window
         {
             _gaps.Clear();
         }
-    }
-
-    private int ComputeInsertIndex(ObservableCollection<MacroBlock> owner, DragEventArgs e)
-    {
-        var relative = FindDataContext<MacroBlock>(e.OriginalSource as DependencyObject);
-        if (relative is null || !owner.Contains(relative))
-        {
-            return owner.Count;
-        }
-
-        var index = owner.IndexOf(relative);
-        return IsLowerHalfOfElement(e.OriginalSource as DependencyObject) ? index + 1 : index;
-    }
-
-    private int ComputeInsertIndex(ObservableCollection<MacroBlock> owner, MacroBlock relative, DragEventArgs e)
-    {
-        if (!owner.Contains(relative))
-        {
-            return owner.Count;
-        }
-
-        var index = owner.IndexOf(relative);
-        return IsLowerHalfOfElement(e.OriginalSource as DependencyObject) ? index + 1 : index;
     }
 
     private ItemsControl? FindItemsControlForOwner(ObservableCollection<MacroBlock> owner)
@@ -468,23 +447,6 @@ public partial class MainWindow : Window
         }
 
         return null;
-    }
-
-    private static bool IsLowerHalfOfElement(DependencyObject? origin)
-    {
-        var current = origin;
-        while (current is not null)
-        {
-            if (current is FrameworkElement fe && fe.DataContext is MacroBlock)
-            {
-                var pos = Mouse.GetPosition(fe);
-                return pos.Y > fe.ActualHeight / 2;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return false;
     }
 
     private static T? FindDataContext<T>(DependencyObject? origin) where T : class
