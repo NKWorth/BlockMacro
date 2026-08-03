@@ -21,6 +21,7 @@ public sealed class MacroScript
 
     /// <summary>
     /// Serialization surface for <see cref="Blocks"/>.
+    /// Legacy flat End Continue markers are nested on load.
     /// </summary>
     [JsonPropertyName("blocks")]
     public List<MacroBlock> BlocksForStorage
@@ -34,7 +35,7 @@ public sealed class MacroScript
                 return;
             }
 
-            foreach (var block in value)
+            foreach (var block in ScriptMigrator.ToNested(value))
             {
                 Blocks.Add(block);
             }

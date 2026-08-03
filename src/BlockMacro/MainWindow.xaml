@@ -4,6 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:BlockMacro.ViewModels"
+        xmlns:models="clr-namespace:BlockMacro.Models"
+        xmlns:local="clr-namespace:BlockMacro"
         mc:Ignorable="d"
         Title="BlockMacro"
         Height="720"
@@ -66,6 +68,108 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
+
+        <DataTemplate x:Key="DefaultBlockTemplate">
+            <Border Margin="0,0,0,6"
+                    BorderBrush="#E5E7EB"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="10,8"
+                    Cursor="SizeAll"
+                    PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="BlockItem_PreviewMouseMove"
+                    PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
+                <Border.Background>
+                    <MultiBinding Converter="{x:Static local:SelectedBlockBackgroundConverter.Instance}">
+                        <Binding />
+                        <Binding Path="DataContext.SelectedBlock"
+                                 RelativeSource="{RelativeSource AncestorType=Window}" />
+                    </MultiBinding>
+                </Border.Background>
+                <StackPanel>
+                    <TextBlock Text="{Binding DisplayName}"
+                               FontWeight="SemiBold"
+                               Foreground="#111827" />
+                    <TextBlock Text="{Binding Summary}"
+                               Foreground="#6B7280"
+                               FontSize="12"
+                               Margin="0,2,0,0" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ContinueUntilBlockTemplate">
+            <Border Margin="0,0,0,8"
+                    BorderBrush="#93C5FD"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Background="#EFF6FF">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top"
+                            Padding="10,8"
+                            Cursor="SizeAll"
+                            Background="Transparent"
+                            AllowDrop="True"
+                            PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
+                            PreviewMouseMove="BlockItem_PreviewMouseMove"
+                            PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp"
+                            DragOver="FlowHeader_DragOver"
+                            Drop="FlowHeader_Drop">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#1E3A8A" />
+                            <TextBlock Text="{Binding Summary}"
+                                       Foreground="#3B82F6"
+                                       FontSize="12"
+                                       Margin="0,2,0,0" />
+                            <TextBlock Text="Drop an event here to assign · body below"
+                                       Foreground="#93C5FD"
+                                       FontSize="10"
+                                       Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="14,0,8,8"
+                            Padding="8"
+                            MinHeight="48"
+                            Background="#F8FAFC"
+                            BorderBrush="#BFDBFE"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            AllowDrop="True"
+                            DragOver="FlowBody_DragOver"
+                            Drop="FlowBody_Drop">
+                        <Grid>
+                            <TextBlock Text="Drop blocks here"
+                                       Foreground="#93C5FD"
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Children.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <ItemsControl ItemsSource="{Binding Children}"
+                                          ItemTemplateSelector="{DynamicResource BlockTemplateSelector}" />
+                        </Grid>
+                    </Border>
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+
+        <local:BlockTemplateSelector x:Key="BlockTemplateSelector"
+                                     DefaultTemplate="{StaticResource DefaultBlockTemplate}"
+                                     ContinueUntilTemplate="{StaticResource ContinueUntilBlockTemplate}" />
     </Window.Resources>
 
     <DockPanel Margin="16">
@@ -254,47 +358,14 @@
                             </StackPanel>
                         </DockPanel>
 
-                        <ListBox x:Name="ScriptList"
-                                 ItemsSource="{Binding Blocks}"
-                                 SelectedItem="{Binding SelectedBlock}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 AllowDrop="True"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 PreviewMouseLeftButtonDown="ScriptList_PreviewMouseLeftButtonDown"
-                                 PreviewMouseMove="ScriptList_PreviewMouseMove"
-                                 PreviewMouseLeftButtonUp="ScriptList_PreviewMouseLeftButtonUp"
-                                 DragOver="ScriptList_DragOver"
-                                 Drop="ScriptList_Drop">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="Padding" Value="0" />
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                    <Setter Property="AllowDrop" Value="True" />
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#F8FAFC"
-                                            BorderBrush="#E5E7EB"
-                                            BorderThickness="1"
-                                            CornerRadius="4"
-                                            Padding="10,8"
-                                            Margin="0,0,0,6"
-                                            Cursor="SizeAll">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding DisplayName}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="#111827" />
-                                            <TextBlock Text="{Binding Summary}"
-                                                       Foreground="#6B7280"
-                                                       FontSize="12"
-                                                       Margin="0,2,0,0" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      AllowDrop="True"
+                                      DragOver="ScriptRoot_DragOver"
+                                      Drop="ScriptRoot_Drop">
+                            <ItemsControl x:Name="ScriptList"
+                                          ItemsSource="{Binding Blocks}"
+                                          ItemTemplateSelector="{StaticResource BlockTemplateSelector}" />
+                        </ScrollViewer>
                     </DockPanel>
                 </Border>
             </Grid>
@@ -401,7 +472,7 @@
                                        Foreground="#6B7280"
                                        FontSize="11"
                                        LineHeight="16"
-                                       Text="Blocks between Continue Until and End Continue repeat until the selected event fires. Drag an Event from the palette or script list onto this block to assign it." />
+                                       Text="Body blocks nest inside this flow. Drag blocks into or out of the indented area. Drop an event on the header to assign it." />
                         </StackPanel>
 
                         <!-- Run Subscript editor -->

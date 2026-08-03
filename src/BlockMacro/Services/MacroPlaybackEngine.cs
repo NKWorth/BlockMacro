@@ -39,12 +39,13 @@ public sealed class MacroPlaybackEngine
             try
             {
                 var reachable = CollectReachableScripts(script).ToList();
-                foreach (var evt in reachable.SelectMany(s => s.Blocks.OfType<EventBlock>()))
+                var allEvents = reachable.SelectMany(s => BlockTree.EnumerateEvents(s.Blocks)).ToList();
+                foreach (var evt in allEvents)
                 {
                     runtime.RegisterEvent(evt.Id);
                 }
 
-                var keyEvents = reachable.SelectMany(s => s.Blocks.OfType<KeyPressEventBlock>()).ToList();
+                var keyEvents = allEvents.OfType<KeyPressEventBlock>().ToList();
                 watcher = new KeyPressEventWatcher(runtime, keyEvents);
                 watcher.Start();
 
@@ -56,7 +57,7 @@ public sealed class MacroPlaybackEngine
 
                 do
                 {
-                    foreach (var evt in reachable.SelectMany(s => s.Blocks.OfType<EventBlock>()))
+                    foreach (var evt in allEvents)
                     {
                         runtime.Reset(evt.Id);
                     }
@@ -103,7 +104,7 @@ public sealed class MacroPlaybackEngine
 
             yield return current;
 
-            foreach (var call in current.Blocks.OfType<RunSubscriptBlock>())
+            foreach (var call in BlockTree.EnumerateSubscripts(current.Blocks))
             {
                 if (call.ScriptId is not { } id)
                 {
@@ -127,7 +128,7 @@ public sealed class MacroPlaybackEngine
         Stack<Guid> callStack,
         CancellationToken token)
     {
-        for (var i = start; i < end;)
+        for (var i = start; i < end; i++)
         {
             token.ThrowIfCancellationRequested();
             var block = blocks[i];
@@ -135,28 +136,22 @@ public sealed class MacroPlaybackEngine
             switch (block)
             {
                 case EventBlock:
-                    i++;
+                case EndContinueBlock:
                     break;
 
                 case ContinueUntilBlock continueUntil:
-                    i = await ExecuteContinueUntilAsync(blocks, i, end, continueUntil, runtime, callStack, token)
+                    await ExecuteContinueUntilAsync(continueUntil, runtime, callStack, token)
                         .ConfigureAwait(false);
-                    break;
-
-                case EndContinueBlock:
-                    i++;
                     break;
 
                 case RunSubscriptBlock call:
                     StatusChanged?.Invoke(this, $"Running: {call.DisplayName} — {call.Summary}");
                     await ExecuteSubscriptAsync(call, runtime, callStack, token).ConfigureAwait(false);
-                    i++;
                     break;
 
                 default:
                     StatusChanged?.Invoke(this, $"Running: {block.DisplayName} — {block.Summary}");
                     await ExecuteActionAsync(block, token).ConfigureAwait(false);
-                    i++;
                     break;
             }
         }
@@ -195,29 +190,16 @@ public sealed class MacroPlaybackEngine
         }
     }
 
-    private async Task<int> ExecuteContinueUntilAsync(
-        IReadOnlyList<MacroBlock> blocks,
-        int continueIndex,
-        int rangeEnd,
+    private async Task ExecuteContinueUntilAsync(
         ContinueUntilBlock continueUntil,
         ScriptRuntime runtime,
         Stack<Guid> callStack,
         CancellationToken token)
     {
-        var endIndex = FindMatchingEndContinue(blocks, continueIndex, rangeEnd);
-        if (endIndex < 0)
-        {
-            throw new InvalidOperationException(
-                $"Continue Until at position {continueIndex + 1} is missing a matching End Continue.");
-        }
-
         if (continueUntil.EventBlockId is not { } eventId)
         {
             throw new InvalidOperationException("Continue Until has no event selected.");
         }
-
-        var bodyStart = continueIndex + 1;
-        var bodyEnd = endIndex;
 
         runtime.Reset(eventId);
         StatusChanged?.Invoke(this, $"Continue until {continueUntil.EventLabel}…");
@@ -226,13 +208,14 @@ public sealed class MacroPlaybackEngine
         {
             token.ThrowIfCancellationRequested();
 
-            if (bodyStart >= bodyEnd)
+            if (continueUntil.Children.Count == 0)
             {
                 await Task.Delay(25, token).ConfigureAwait(false);
                 continue;
             }
 
-            await ExecuteRangeAsync(blocks, bodyStart, bodyEnd, runtime, callStack, token)
+            var body = continueUntil.Children.ToArray();
+            await ExecuteRangeAsync(body, 0, body.Length, runtime, callStack, token)
                 .ConfigureAwait(false);
 
             if (!runtime.IsTriggered(eventId))
@@ -242,28 +225,6 @@ public sealed class MacroPlaybackEngine
         }
 
         StatusChanged?.Invoke(this, $"Event reached: {continueUntil.EventLabel}");
-        return endIndex + 1;
-    }
-
-    private static int FindMatchingEndContinue(IReadOnlyList<MacroBlock> blocks, int continueIndex, int rangeEnd)
-    {
-        var depth = 0;
-        for (var i = continueIndex + 1; i < rangeEnd; i++)
-        {
-            switch (blocks[i])
-            {
-                case ContinueUntilBlock:
-                    depth++;
-                    break;
-                case EndContinueBlock when depth == 0:
-                    return i;
-                case EndContinueBlock:
-                    depth--;
-                    break;
-            }
-        }
-
-        return -1;
     }
 
     private async Task ExecuteActionAsync(MacroBlock block, CancellationToken token)

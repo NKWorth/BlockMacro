@@ -1,8 +1,10 @@
+using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
+
 namespace BlockMacro.Models;
 
 /// <summary>
-/// Loops the blocks between this marker and the matching <see cref="EndContinueBlock"/>
-/// until the referenced event flag is raised.
+/// Loops nested body blocks until the referenced event flag is raised.
 /// </summary>
 public sealed class ContinueUntilBlock : MacroBlock
 {
@@ -33,13 +35,47 @@ public sealed class ContinueUntilBlock : MacroBlock
         }
     }
 
+    [JsonIgnore]
+    public ObservableCollection<MacroBlock> Children { get; } = [];
+
+    [JsonPropertyName("children")]
+    public List<MacroBlock> ChildrenForStorage
+    {
+        get => Children.ToList();
+        set
+        {
+            Children.Clear();
+            if (value is null)
+            {
+                return;
+            }
+
+            foreach (var child in value)
+            {
+                Children.Add(child);
+            }
+        }
+    }
+
     public override string DisplayName => "Continue Until";
 
     public override string Summary => $"until {EventLabel}";
 
-    public override MacroBlock Clone() => new ContinueUntilBlock
+    public override MacroBlock Clone()
     {
-        EventBlockId = EventBlockId,
-        EventLabel = EventLabel
-    };
+        var copy = new ContinueUntilBlock
+        {
+            EventBlockId = EventBlockId,
+            EventLabel = EventLabel
+        };
+
+        foreach (var child in Children)
+        {
+            var cloned = child.Clone();
+            cloned.Id = child.Id;
+            copy.Children.Add(cloned);
+        }
+
+        return copy;
+    }
 }

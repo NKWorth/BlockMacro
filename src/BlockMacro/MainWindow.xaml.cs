@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Collections.ObjectModel;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -23,40 +24,92 @@ public partial class MainWindow : Window
 
     private MainViewModel? Vm => DataContext as MainViewModel;
 
-    private void ScriptList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void BlockItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Vm is null || !CanDragEdit())
+        if (Vm is null)
+        {
+            return;
+        }
+
+        var block = FindDataContext<MacroBlock>(e.OriginalSource as DependencyObject);
+        if (block is null)
+        {
+            return;
+        }
+
+        Vm.SelectedBlock = block;
+
+        if (!CanDragEdit())
         {
             return;
         }
 
         _scriptDragStart = e.GetPosition(null);
-        _scriptDragBlock = FindDataContext<MacroBlock>(e.OriginalSource as DependencyObject);
-        _scriptDragPending = _scriptDragBlock is not null;
+        _scriptDragBlock = block;
+        _scriptDragPending = true;
     }
 
-    private void ScriptList_PreviewMouseMove(object sender, MouseEventArgs e)
+    private void BlockItem_PreviewMouseMove(object sender, MouseEventArgs e)
     {
         if (!_scriptDragPending
             || _scriptDragBlock is null
             || e.LeftButton != MouseButtonState.Pressed
-            || !HasDragMoved(_scriptDragStart, e.GetPosition(null)))
+            || !HasDragMoved(_scriptDragStart, e.GetPosition(null))
+            || sender is not FrameworkElement element)
         {
             return;
         }
 
         _scriptDragPending = false;
         var data = new DataObject(DragFormats.ScriptBlock, _scriptDragBlock);
-        DragDrop.DoDragDrop(ScriptList, data, DragDropEffects.Move);
+        DragDrop.DoDragDrop(element, data, DragDropEffects.Move);
     }
 
-    private void ScriptList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private void BlockItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         _scriptDragPending = false;
         _scriptDragBlock = null;
     }
 
-    private void ScriptList_DragOver(object sender, DragEventArgs e)
+    private void ScriptRoot_DragOver(object sender, DragEventArgs e)
+        => HandleDragOver(e, Vm?.Blocks, isFlowBody: false, flow: null);
+
+    private void ScriptRoot_Drop(object sender, DragEventArgs e)
+        => HandleDrop(e, Vm?.Blocks, isFlowBody: false, flow: null);
+
+    private void FlowHeader_DragOver(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDragOver(e, null, isFlowBody: false, flow: flow);
+    }
+
+    private void FlowHeader_Drop(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDrop(e, null, isFlowBody: false, flow: flow);
+    }
+
+    private void FlowBody_DragOver(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDragOver(e, flow?.Children, isFlowBody: true, flow: flow);
+    }
+
+    private void FlowBody_Drop(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDrop(e, flow?.Children, isFlowBody: true, flow: flow);
+    }
+
+    private void HandleDragOver(
+        DragEventArgs e,
+        ObservableCollection<MacroBlock>? targetOwner,
+        bool isFlowBody,
+        ContinueUntilBlock? flow)
     {
         e.Effects = DragDropEffects.None;
 
@@ -66,47 +119,63 @@ public partial class MainWindow : Window
             return;
         }
 
-        var target = FindBlockAtPosition(e.GetPosition(ScriptList));
-
-        if (e.Data.GetDataPresent(DragFormats.PaletteEventKind))
+        if (e.Data.GetDataPresent(DragFormats.PaletteEventKind) && flow is not null && !isFlowBody)
         {
-            if (target is ContinueUntilBlock)
-            {
-                e.Effects = DragDropEffects.Copy;
-            }
+            e.Effects = DragDropEffects.Copy;
         }
         else if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
                  && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock source)
         {
-            if (source is EventBlock && target is ContinueUntilBlock && !ReferenceEquals(source, target))
+            if (source is EventBlock && flow is not null && !isFlowBody && !ReferenceEquals(source, flow))
             {
                 e.Effects = DragDropEffects.Link;
             }
-            else if (!ReferenceEquals(source, target))
+            else if (isFlowBody && targetOwner is not null && !ReferenceEquals(source, flow))
+            {
+                if (source is ContinueUntilBlock movingFlow && BlockTree.IsOwnedBy(targetOwner, movingFlow))
+                {
+                    e.Effects = DragDropEffects.None;
+                }
+                else
+                {
+                    e.Effects = DragDropEffects.Move;
+                }
+            }
+            else if (!isFlowBody && targetOwner is not null)
             {
                 e.Effects = DragDropEffects.Move;
+            }
+            else if (!isFlowBody && flow is null)
+            {
+                var under = FindDataContext<MacroBlock>(e.OriginalSource as DependencyObject);
+                if (under is not null && !ReferenceEquals(under, source))
+                {
+                    e.Effects = DragDropEffects.Move;
+                }
             }
         }
 
         e.Handled = true;
     }
 
-    private void ScriptList_Drop(object sender, DragEventArgs e)
+    private void HandleDrop(
+        DragEventArgs e,
+        ObservableCollection<MacroBlock>? targetOwner,
+        bool isFlowBody,
+        ContinueUntilBlock? flow)
     {
         if (Vm is null || !CanDragEdit())
         {
             return;
         }
 
-        var listPos = e.GetPosition(ScriptList);
-        var target = FindBlockAtPosition(listPos);
-
         if (e.Data.GetDataPresent(DragFormats.PaletteEventKind)
             && e.Data.GetData(DragFormats.PaletteEventKind) is string kind
             && kind == "KeyPressEvent"
-            && target is ContinueUntilBlock continueUntilFromPalette)
+            && flow is not null
+            && !isFlowBody)
         {
-            Vm.DropPaletteKeyPressEventOnto(continueUntilFromPalette);
+            Vm.DropPaletteKeyPressEventOnto(flow);
             e.Handled = true;
             return;
         }
@@ -114,24 +183,54 @@ public partial class MainWindow : Window
         if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
             && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock source)
         {
-            if (source is EventBlock eventBlock && target is ContinueUntilBlock continueUntil)
+            if (source is EventBlock eventBlock && flow is not null && !isFlowBody)
             {
-                Vm.AssignEventToContinueUntil(continueUntil, eventBlock);
+                Vm.AssignEventToContinueUntil(flow, eventBlock);
                 e.Handled = true;
                 return;
             }
 
-            if (target is null)
+            if (isFlowBody && targetOwner is not null)
             {
-                Vm.ReorderBlock(source, Vm.Blocks.Count - 1);
-            }
-            else if (!ReferenceEquals(source, target))
-            {
-                var insertAfter = IsInLowerHalf(target, listPos);
-                Vm.ReorderBlockRelative(source, target, insertAfter);
+                var relative = FindDataContext<MacroBlock>(e.OriginalSource as DependencyObject);
+                if (relative is not null
+                    && !ReferenceEquals(relative, flow)
+                    && targetOwner.Contains(relative))
+                {
+                    var insertAfter = IsLowerHalfOfElement(e.OriginalSource as DependencyObject, e.GetPosition(this));
+                    var index = targetOwner.IndexOf(relative) + (insertAfter ? 1 : 0);
+                    Vm.MoveBlockInto(source, targetOwner, index);
+                }
+                else
+                {
+                    Vm.MoveBlockInto(source, targetOwner, targetOwner.Count);
+                }
+
+                e.Handled = true;
+                return;
             }
 
-            e.Handled = true;
+            if (targetOwner is not null && ReferenceEquals(targetOwner, Vm.Blocks))
+            {
+                var relative = FindDataContext<MacroBlock>(e.OriginalSource as DependencyObject);
+                if (relative is ContinueUntilBlock)
+                {
+                    // Dropped on flow chrome outside body — treat as root reorder relative to flow.
+                    var insertAfter = IsLowerHalfOfElement(e.OriginalSource as DependencyObject, e.GetPosition(this));
+                    Vm.MoveBlockRelative(source, relative, insertAfter);
+                }
+                else if (relative is not null && !ReferenceEquals(relative, source))
+                {
+                    var insertAfter = IsLowerHalfOfElement(e.OriginalSource as DependencyObject, e.GetPosition(this));
+                    Vm.MoveBlockRelative(source, relative, insertAfter);
+                }
+                else
+                {
+                    Vm.MoveBlockInto(source, Vm.Blocks, Vm.Blocks.Count);
+                }
+
+                e.Handled = true;
+            }
         }
     }
 
@@ -169,22 +268,21 @@ public partial class MainWindow : Window
         _paletteDragKind = null;
     }
 
-    private bool IsInLowerHalf(MacroBlock target, Point positionInList)
+    private static bool IsLowerHalfOfElement(DependencyObject? origin, Point _)
     {
-        if (ScriptList.ItemContainerGenerator.ContainerFromItem(target) is not ListBoxItem container)
+        var current = origin;
+        while (current is not null)
         {
-            return false;
+            if (current is FrameworkElement fe && fe.DataContext is MacroBlock)
+            {
+                var pos = Mouse.GetPosition(fe);
+                return pos.Y > fe.ActualHeight / 2;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
         }
 
-        var posInItem = ScriptList.TranslatePoint(positionInList, container);
-        return posInItem.Y > container.ActualHeight / 2;
-    }
-
-    private MacroBlock? FindBlockAtPosition(Point positionInList)
-    {
-        var element = ScriptList.InputHitTest(positionInList) as DependencyObject
-                      ?? VisualTreeHelper.HitTest(ScriptList, positionInList)?.VisualHit;
-        return FindDataContext<MacroBlock>(element);
+        return false;
     }
 
     private static T? FindDataContext<T>(DependencyObject? origin) where T : class

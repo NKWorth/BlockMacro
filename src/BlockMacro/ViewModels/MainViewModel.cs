@@ -10,6 +10,7 @@ namespace BlockMacro.ViewModels;
 
 public sealed class MainViewModel : ViewModelBase
 {
+    private readonly HashSet<ObservableCollection<MacroBlock>> _subscribedCollections;
     private readonly MacroPlaybackEngine _engine;
     private readonly IScriptLibrary _library;
     private readonly ScreenPointPicker _pointPicker = new();
@@ -42,8 +43,9 @@ public sealed class MainViewModel : ViewModelBase
         _scriptName = _script.Name;
         AvailableEvents = [];
         LibraryScripts = [];
+        _subscribedCollections = [];
 
-        _script.Blocks.CollectionChanged += OnBlocksChanged;
+        EnsureTreeSubscriptions(_script.Blocks);
         _library.Changed += (_, _) => Application.Current.Dispatcher.Invoke(RefreshLibrary);
 
         _engine.Started += (_, _) =>
@@ -335,7 +337,6 @@ public sealed class MainViewModel : ViewModelBase
     private void AddContinueUntil()
     {
         var block = new ContinueUntilBlock();
-        var end = new EndContinueBlock();
 
         if (AvailableEvents.Count > 0)
         {
@@ -345,7 +346,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         Blocks.Add(block);
-        Blocks.Add(end);
+        EnsureTreeSubscriptions(block.Children);
         SelectedBlock = block;
     }
 
@@ -370,54 +371,27 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var index = Blocks.IndexOf(SelectedBlock);
-
-        if (SelectedBlock is ContinueUntilBlock)
+        if (!BlockTree.TryFindOwner(Blocks, SelectedBlock, out var owner, out var index))
         {
-            var endIndex = FindMatchingEndContinue(index);
-            if (endIndex > index)
-            {
-                Blocks.RemoveAt(endIndex);
-            }
+            return;
         }
 
-        Blocks.Remove(SelectedBlock);
-        SelectedBlock = Blocks.Count == 0
+        owner.RemoveAt(index);
+        SelectedBlock = owner.Count == 0
             ? null
-            : Blocks[Math.Clamp(index, 0, Blocks.Count - 1)];
-    }
-
-    private int FindMatchingEndContinue(int continueIndex)
-    {
-        var depth = 0;
-        for (var i = continueIndex + 1; i < Blocks.Count; i++)
-        {
-            switch (Blocks[i])
-            {
-                case ContinueUntilBlock:
-                    depth++;
-                    break;
-                case EndContinueBlock when depth == 0:
-                    return i;
-                case EndContinueBlock:
-                    depth--;
-                    break;
-            }
-        }
-
-        return -1;
+            : owner[Math.Clamp(index, 0, owner.Count - 1)];
     }
 
     private bool CanMoveSelected(int delta)
     {
-        if (SelectedBlock is null)
+        if (SelectedBlock is null
+            || !BlockTree.TryFindOwner(Blocks, SelectedBlock, out var owner, out var index))
         {
             return false;
         }
 
-        var index = Blocks.IndexOf(SelectedBlock);
         var target = index + delta;
-        return index >= 0 && target >= 0 && target < Blocks.Count;
+        return target >= 0 && target < owner.Count;
     }
 
     private void MoveUp() => MoveSelected(-1);
@@ -426,19 +400,19 @@ public sealed class MainViewModel : ViewModelBase
 
     private void MoveSelected(int delta)
     {
-        if (SelectedBlock is null)
+        if (SelectedBlock is null
+            || !BlockTree.TryFindOwner(Blocks, SelectedBlock, out var owner, out var index))
         {
             return;
         }
 
-        var index = Blocks.IndexOf(SelectedBlock);
         var target = index + delta;
-        if (index < 0 || target < 0 || target >= Blocks.Count)
+        if (target < 0 || target >= owner.Count)
         {
             return;
         }
 
-        Blocks.Move(index, target);
+        owner.Move(index, target);
         RefreshCommands();
     }
 
@@ -518,9 +492,14 @@ public sealed class MainViewModel : ViewModelBase
 
     private void ReplaceWorkingScript(MacroScript script)
     {
-        _script.Blocks.CollectionChanged -= OnBlocksChanged;
+        foreach (var collection in _subscribedCollections.ToList())
+        {
+            collection.CollectionChanged -= OnBlocksChanged;
+        }
+
+        _subscribedCollections.Clear();
         _script = script;
-        _script.Blocks.CollectionChanged += OnBlocksChanged;
+        EnsureTreeSubscriptions(_script.Blocks);
 
         _scriptName = _script.Name;
         _loopForever = _script.LoopForever;
@@ -639,9 +618,23 @@ public sealed class MainViewModel : ViewModelBase
 
     private void OnBlocksChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        EnsureTreeSubscriptions(Blocks);
         RefreshAvailableEvents();
         SyncContinueUntilLabels();
         SyncRunSubscriptLabels();
+    }
+
+    private void EnsureTreeSubscriptions(ObservableCollection<MacroBlock> list)
+    {
+        if (_subscribedCollections.Add(list))
+        {
+            list.CollectionChanged += OnBlocksChanged;
+        }
+
+        foreach (var flow in list.OfType<ContinueUntilBlock>())
+        {
+            EnsureTreeSubscriptions(flow.Children);
+        }
     }
 
     private void OnSelectedBlockPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -655,7 +648,7 @@ public sealed class MainViewModel : ViewModelBase
     private void RefreshAvailableEvents()
     {
         AvailableEvents.Clear();
-        foreach (var evt in Blocks.OfType<EventBlock>())
+        foreach (var evt in BlockTree.EnumerateEvents(Blocks))
         {
             AvailableEvents.Add(evt);
         }
@@ -665,8 +658,8 @@ public sealed class MainViewModel : ViewModelBase
 
     private void SyncContinueUntilLabels()
     {
-        var events = Blocks.OfType<EventBlock>().ToDictionary(e => e.Id);
-        foreach (var cont in Blocks.OfType<ContinueUntilBlock>())
+        var events = BlockTree.EnumerateEvents(Blocks).ToDictionary(e => e.Id);
+        foreach (var cont in BlockTree.Enumerate(Blocks).OfType<ContinueUntilBlock>())
         {
             if (cont.EventBlockId is { } id && events.TryGetValue(id, out var evt))
             {
@@ -682,7 +675,7 @@ public sealed class MainViewModel : ViewModelBase
     private void SyncRunSubscriptLabels()
     {
         var library = LibraryScripts.ToDictionary(s => s.Id);
-        foreach (var call in Blocks.OfType<RunSubscriptBlock>())
+        foreach (var call in BlockTree.EnumerateSubscripts(Blocks))
         {
             if (call.ScriptId is { } id && library.TryGetValue(id, out var script))
             {
@@ -705,51 +698,65 @@ public sealed class MainViewModel : ViewModelBase
         AssignEventToContinueUntil(SelectedContinueUntil, evt);
     }
 
-    public void ReorderBlock(MacroBlock block, int targetIndex)
+    public void MoveBlockInto(
+        MacroBlock block,
+        ObservableCollection<MacroBlock> targetOwner,
+        int targetIndex)
     {
-        if (!CanEditScript())
+        if (!CanEditScript()
+            || !BlockTree.TryFindOwner(Blocks, block, out var sourceOwner, out var sourceIndex))
         {
             return;
         }
 
-        var from = Blocks.IndexOf(block);
-        if (from < 0)
+        if (block is ContinueUntilBlock flow && BlockTree.IsOwnedBy(targetOwner, flow))
         {
+            Status = "Cannot move a flow into itself";
             return;
         }
 
-        var to = Math.Clamp(targetIndex, 0, Blocks.Count - 1);
-        if (from == to)
+        if (ReferenceEquals(sourceOwner, targetOwner))
         {
-            return;
+            var to = Math.Clamp(targetIndex, 0, targetOwner.Count - 1);
+            if (sourceIndex < to)
+            {
+                to--;
+            }
+
+            to = Math.Clamp(to, 0, targetOwner.Count - 1);
+            if (sourceIndex != to)
+            {
+                targetOwner.Move(sourceIndex, to);
+            }
+        }
+        else
+        {
+            sourceOwner.RemoveAt(sourceIndex);
+            var insertAt = Math.Clamp(targetIndex, 0, targetOwner.Count);
+            targetOwner.Insert(insertAt, block);
+            if (block is ContinueUntilBlock nested)
+            {
+                EnsureTreeSubscriptions(nested.Children);
+            }
         }
 
-        Blocks.Move(from, to);
         SelectedBlock = block;
-        Status = "Reordered block";
+        Status = "Moved block";
     }
 
-    public void ReorderBlockRelative(MacroBlock block, MacroBlock relativeTo, bool insertAfter)
+    public void MoveBlockRelative(
+        MacroBlock block,
+        MacroBlock relativeTo,
+        bool insertAfter)
     {
-        if (!CanEditScript())
+        if (!CanEditScript()
+            || !BlockTree.TryFindOwner(Blocks, relativeTo, out var targetOwner, out var relativeIndex))
         {
             return;
         }
 
-        var from = Blocks.IndexOf(block);
-        var relativeIndex = Blocks.IndexOf(relativeTo);
-        if (from < 0 || relativeIndex < 0 || ReferenceEquals(block, relativeTo))
-        {
-            return;
-        }
-
-        var to = insertAfter ? relativeIndex + 1 : relativeIndex;
-        if (from < to)
-        {
-            to--;
-        }
-
-        ReorderBlock(block, to);
+        var targetIndex = insertAfter ? relativeIndex + 1 : relativeIndex;
+        MoveBlockInto(block, targetOwner, targetIndex);
     }
 
     public void AssignEventToContinueUntil(ContinueUntilBlock flow, EventBlock? evt)
@@ -784,14 +791,13 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         var evt = new KeyPressEventBlock();
-        var flowIndex = Blocks.IndexOf(flow);
-        if (flowIndex < 0)
+        if (BlockTree.TryFindOwner(Blocks, flow, out var owner, out var index))
         {
-            Blocks.Add(evt);
+            owner.Insert(index, evt);
         }
         else
         {
-            Blocks.Insert(flowIndex, evt);
+            Blocks.Add(evt);
         }
 
         AssignEventToContinueUntil(flow, evt);
