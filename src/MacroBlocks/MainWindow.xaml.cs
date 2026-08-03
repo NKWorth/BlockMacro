@@ -286,6 +286,8 @@ public partial class MainWindow : Window
         }
     }
 
+    private const double FlowEdgePixels = 16;
+
     private void HandleDragOver(
         DragEventArgs e,
         ObservableCollection<MacroBlock>? targetOwner,
@@ -306,27 +308,43 @@ public partial class MainWindow : Window
         var hasPalette = e.Data.GetDataPresent(DragFormats.PaletteBlockKind);
         var hasScript = e.Data.GetDataPresent(DragFormats.ScriptBlock)
                         && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock;
+        if (!hasPalette && !hasScript)
+        {
+            e.Handled = true;
+            return;
+        }
 
+        var isEventPayload = (hasPalette
+                              && e.Data.GetData(DragFormats.PaletteBlockKind) is string ek
+                              && ek == "KeyPressEvent")
+                             || (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock);
+
+        // Event slot: events only; non-events over interior go to the body.
         if (isEventSlot && flow is not null)
         {
-            if (hasPalette && e.Data.GetData(DragFormats.PaletteBlockKind) is string kind && kind == "KeyPressEvent")
+            if (isEventPayload)
             {
-                e.Effects = DragDropEffects.Copy;
+                e.Effects = hasPalette ? DragDropEffects.Copy : DragDropEffects.Move;
+                _gaps.Clear();
             }
-            else if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
+            else if (TryGetFlowChrome(e, flow, out var chrome)
+                     && IsNearFlowVerticalEdge(chrome, e.GetPosition(chrome)))
             {
-                e.Effects = DragDropEffects.Move;
+                ShowParentReorder(e, flow, hasPalette);
+            }
+            else if (!isEventPayload)
+            {
+                ShowBodyTarget(e, flow, hasPalette);
             }
 
-            _gaps.Clear();
             e.Handled = true;
             return;
         }
 
-        // Body rejects events — they belong in the event slot.
-        if (isFlowBody)
+        // Body: reject events; highlight empty body or nudge children.
+        if (isFlowBody && flow is not null)
         {
-            if (hasPalette && e.Data.GetData(DragFormats.PaletteBlockKind) is string bodyKind && bodyKind == "KeyPressEvent")
+            if (isEventPayload)
             {
                 e.Effects = DragDropEffects.None;
                 _gaps.Clear();
@@ -334,60 +352,70 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
+            if (TryGetFlowChrome(e, flow, out var chrome)
+                && IsNearFlowVerticalEdge(chrome, e.GetPosition(chrome)))
             {
-                e.Effects = DragDropEffects.None;
-                _gaps.Clear();
-                e.Handled = true;
-                return;
+                ShowParentReorder(e, flow, hasPalette);
             }
-        }
-
-        if (targetOwner is null)
-        {
-            // Dropping on flow header as reorder relative to the flow in its parent.
-            if (flow is not null
-                && BlockTree.TryFindOwner(Vm.Blocks, flow, out var parentOwner, out _)
-                && (hasPalette || hasScript))
+            else
             {
-                var parentList = FindItemsControlForOwner(parentOwner) ?? ScriptList;
-                if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock src
-                    && src is ContinueUntilBlock mf
-                    && (ReferenceEquals(src, flow) || BlockTree.ContainsBlock(mf, flow)))
-                {
-                    e.Effects = DragDropEffects.None;
-                    _gaps.Clear();
-                }
-                else if (hasPalette && e.Data.GetData(DragFormats.PaletteBlockKind) is string pk && pk == "KeyPressEvent")
-                {
-                    // Events go to the event slot, not beside the flow via header.
-                    e.Effects = DragDropEffects.None;
-                    _gaps.Clear();
-                }
-                else if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
-                {
-                    e.Effects = DragDropEffects.None;
-                    _gaps.Clear();
-                }
-                else if (parentList is not null)
-                {
-                    e.Effects = hasPalette ? DragDropEffects.Copy : DragDropEffects.Move;
-                    var insertIndex = _gaps.ComputeInsertIndex(parentList, e.GetPosition(parentList));
-                    _gaps.Show(parentList, parentOwner, insertIndex);
-                }
+                ShowBodyTarget(e, flow, hasPalette, list);
             }
 
             e.Handled = true;
             return;
         }
 
-        if (hasPalette || hasScript)
+        // Header / chrome without body owner: edges reorder in parent; interior nests in body.
+        if (targetOwner is null && flow is not null)
         {
+            if (isEventPayload)
+            {
+                e.Effects = DragDropEffects.None;
+                _gaps.Clear();
+                e.Handled = true;
+                return;
+            }
+
+            if (TryGetFlowChrome(e, flow, out var chrome)
+                && IsNearFlowVerticalEdge(chrome, e.GetPosition(chrome)))
+            {
+                ShowParentReorder(e, flow, hasPalette);
+            }
+            else
+            {
+                ShowBodyTarget(e, flow, hasPalette);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        // Script root (or other collection): if over a flow interior, nest; else gap-nudge.
+        if (targetOwner is not null && !isFlowBody)
+        {
+            var underFlow = FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+            if (underFlow is not null
+                && !isEventPayload
+                && TryGetFlowChrome(e, underFlow, out var underChrome)
+                && !IsNearFlowVerticalEdge(underChrome, e.GetPosition(underChrome)))
+            {
+                ShowBodyTarget(e, underFlow, hasPalette);
+                e.Handled = true;
+                return;
+            }
+
             if (hasScript
                 && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock source
                 && source is ContinueUntilBlock movingFlow
                 && BlockTree.IsOwnedBy(targetOwner, movingFlow))
             {
+                e.Effects = DragDropEffects.None;
+                _gaps.Clear();
+            }
+            else if (isEventPayload && underFlow is not null)
+            {
+                // Prefer event slot when over a flow; do not insert events into root via flow hover.
                 e.Effects = DragDropEffects.None;
                 _gaps.Clear();
             }
@@ -417,77 +445,85 @@ public partial class MainWindow : Window
 
         try
         {
-            if (isEventSlot && flow is not null)
+            var hasPalette = e.Data.GetDataPresent(DragFormats.PaletteBlockKind);
+            var hasScript = e.Data.GetDataPresent(DragFormats.ScriptBlock)
+                            && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock;
+            var isEventPayload = (hasPalette
+                                  && e.Data.GetData(DragFormats.PaletteBlockKind) is string ek
+                                  && ek == "KeyPressEvent")
+                                 || (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock);
+
+            if (isEventSlot && flow is not null && isEventPayload)
             {
-                if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
-                    && e.Data.GetData(DragFormats.PaletteBlockKind) is string kind
-                    && kind == "KeyPressEvent")
+                if (hasPalette)
                 {
                     Vm.DropPaletteKeyPressEventOnto(flow);
-                    e.Handled = true;
-                    return;
                 }
-
-                if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
-                    && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock eventBlock)
+                else if (e.Data.GetData(DragFormats.ScriptBlock) is EventBlock eventBlock)
                 {
                     Vm.PlaceEventInSlot(flow, eventBlock);
-                    e.Handled = true;
-                    return;
                 }
 
                 e.Handled = true;
                 return;
             }
 
-            if (isFlowBody)
-            {
-                if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
-                    && e.Data.GetData(DragFormats.PaletteBlockKind) is string rejectKind
-                    && rejectKind == "KeyPressEvent")
-                {
-                    e.Handled = true;
-                    return;
-                }
+            // Resolve effective target: body interior vs parent edge.
+            ContinueUntilBlock? nestFlow = flow
+                ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+            var nestInBody = false;
+            var reorderInParent = false;
 
-                if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
-                    && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
+            if (nestFlow is not null && !isEventPayload)
+            {
+                if (TryGetFlowChrome(e, nestFlow, out var chrome))
                 {
-                    e.Handled = true;
-                    return;
+                    if (IsNearFlowVerticalEdge(chrome, e.GetPosition(chrome)))
+                    {
+                        reorderInParent = true;
+                    }
+                    else if (isFlowBody || isEventSlot || targetOwner is null
+                             || ReferenceEquals(targetOwner, Vm.Blocks)
+                             || ReferenceEquals(_gaps.TargetOwner, nestFlow.Children))
+                    {
+                        nestInBody = true;
+                    }
+                }
+                else if (isFlowBody || ReferenceEquals(_gaps.TargetOwner, nestFlow.Children))
+                {
+                    nestInBody = true;
                 }
             }
 
-            // Other drops on header → insert around the flow in its parent.
-            if (!isFlowBody && flow is not null && targetOwner is null)
+            if (nestInBody && nestFlow is not null)
             {
-                if (BlockTree.TryFindOwner(Vm.Blocks, flow, out var parentOwner, out _))
+                if (isEventPayload)
                 {
-                    var parentList = FindItemsControlForOwner(parentOwner) ?? ScriptList;
-                    var insertIndex = parentList is not null
-                        ? _gaps.ComputeInsertIndex(parentList, e.GetPosition(parentList))
-                        : parentOwner.IndexOf(flow);
-
-                    if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
-                        && e.Data.GetData(DragFormats.PaletteBlockKind) is string paletteKind
-                        && paletteKind != "KeyPressEvent")
-                    {
-                        Vm.InsertPaletteBlock(paletteKind, parentOwner, insertIndex);
-                        e.Handled = true;
-                        return;
-                    }
-
-                    if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
-                        && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock source
-                        && source is not EventBlock
-                        && !ReferenceEquals(source, flow))
-                    {
-                        Vm.MoveBlockInto(source, parentOwner, insertIndex);
-                        e.Handled = true;
-                        return;
-                    }
+                    e.Handled = true;
+                    return;
                 }
 
+                DropIntoOwner(e, nestFlow.Children, index: _gaps.IsEmptyBodyTarget ? 0 : -1);
+                e.Handled = true;
+                return;
+            }
+
+            if (reorderInParent && nestFlow is not null)
+            {
+                if (BlockTree.TryFindOwner(Vm.Blocks, nestFlow, out var parentOwner, out var flowIndex)
+                    && TryGetFlowChrome(e, nestFlow, out var chrome))
+                {
+                    var pos = e.GetPosition(chrome);
+                    var insertIndex = pos.Y < chrome.ActualHeight / 2.0 ? flowIndex : flowIndex + 1;
+                    DropIntoOwner(e, parentOwner, insertIndex);
+                }
+
+                e.Handled = true;
+                return;
+            }
+
+            if (isFlowBody && isEventPayload)
+            {
                 e.Handled = true;
                 return;
             }
@@ -497,37 +533,228 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var list = FindItemsControlForOwner(targetOwner)
-                       ?? FindItemsControl(e.OriginalSource as DependencyObject)
-                       ?? ScriptList;
-            var index = list is not null
-                ? _gaps.ComputeInsertIndex(list, e.GetPosition(list))
-                : targetOwner.Count;
-
-            if (_gaps.InsertIndex >= 0 && ReferenceEquals(_gaps.TargetOwner, targetOwner))
-            {
-                index = _gaps.InsertIndex;
-            }
-
-            if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
-                && e.Data.GetData(DragFormats.PaletteBlockKind) is string dropKind)
-            {
-                Vm.InsertPaletteBlock(dropKind, targetOwner, index);
-                e.Handled = true;
-                return;
-            }
-
-            if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
-                && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock moving)
-            {
-                Vm.MoveBlockInto(moving, targetOwner, index);
-                e.Handled = true;
-            }
+            DropIntoOwner(e, targetOwner, index: -1);
+            e.Handled = true;
         }
         finally
         {
             _gaps.Clear();
         }
+    }
+
+    private void DropIntoOwner(DragEventArgs e, ObservableCollection<MacroBlock> owner, int index)
+    {
+        if (Vm is null)
+        {
+            return;
+        }
+
+        if (index < 0)
+        {
+            var list = FindItemsControlForOwner(owner)
+                       ?? FindItemsControl(e.OriginalSource as DependencyObject)
+                       ?? ScriptList;
+            index = list is not null
+                ? _gaps.ComputeInsertIndex(list, e.GetPosition(list))
+                : owner.Count;
+
+            if (_gaps.InsertIndex >= 0 && ReferenceEquals(_gaps.TargetOwner, owner))
+            {
+                index = _gaps.InsertIndex;
+            }
+        }
+
+        if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
+            && e.Data.GetData(DragFormats.PaletteBlockKind) is string dropKind)
+        {
+            Vm.InsertPaletteBlock(dropKind, owner, index);
+            return;
+        }
+
+        if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
+            && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock moving)
+        {
+            if (moving is EventBlock && IsEventBodyCollection(owner))
+            {
+                return;
+            }
+
+            Vm.MoveBlockInto(moving, owner, index);
+        }
+    }
+
+    private bool IsEventBodyCollection(ObservableCollection<MacroBlock> owner)
+    {
+        if (Vm is null)
+        {
+            return false;
+        }
+
+        foreach (var flow in BlockTree.Enumerate(Vm.Blocks).OfType<ContinueUntilBlock>())
+        {
+            if (ReferenceEquals(flow.Children, owner))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ShowParentReorder(DragEventArgs e, ContinueUntilBlock flow, bool hasPalette)
+    {
+        if (Vm is null
+            || !BlockTree.TryFindOwner(Vm.Blocks, flow, out var parentOwner, out var flowIndex))
+        {
+            e.Effects = DragDropEffects.None;
+            _gaps.Clear();
+            return;
+        }
+
+        if (hasPalette == false
+            && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock src
+            && src is ContinueUntilBlock mf
+            && (ReferenceEquals(src, flow) || BlockTree.ContainsBlock(mf, flow)))
+        {
+            e.Effects = DragDropEffects.None;
+            _gaps.Clear();
+            return;
+        }
+
+        var parentList = FindItemsControlForOwner(parentOwner) ?? ScriptList;
+        if (parentList is null || !TryGetFlowChrome(e, flow, out var chrome))
+        {
+            e.Effects = DragDropEffects.None;
+            _gaps.Clear();
+            return;
+        }
+
+        var insertIndex = e.GetPosition(chrome).Y < chrome.ActualHeight / 2.0
+            ? flowIndex
+            : flowIndex + 1;
+        e.Effects = hasPalette ? DragDropEffects.Copy : DragDropEffects.Move;
+        _gaps.Show(parentList, parentOwner, insertIndex);
+    }
+
+    private void ShowBodyTarget(
+        DragEventArgs e,
+        ContinueUntilBlock flow,
+        bool hasPalette,
+        ItemsControl? list = null)
+    {
+        if (hasPalette == false
+            && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock source
+            && source is ContinueUntilBlock movingFlow
+            && BlockTree.IsOwnedBy(flow.Children, movingFlow))
+        {
+            e.Effects = DragDropEffects.None;
+            _gaps.Clear();
+            return;
+        }
+
+        e.Effects = hasPalette ? DragDropEffects.Copy : DragDropEffects.Move;
+
+        if (flow.Children.Count == 0)
+        {
+            var body = FindFlowBody(e, flow);
+            if (body is not null)
+            {
+                _gaps.ShowEmptyBody(body, flow.Children);
+                return;
+            }
+        }
+
+        var itemsControl = list
+                           ?? FindItemsControlForOwner(flow.Children)
+                           ?? FindItemsControl(e.OriginalSource as DependencyObject);
+        if (itemsControl is null)
+        {
+            _gaps.Clear();
+            return;
+        }
+
+        var insertIndex = _gaps.ComputeInsertIndex(itemsControl, e.GetPosition(itemsControl));
+        _gaps.Show(itemsControl, flow.Children, insertIndex);
+    }
+
+    private bool TryGetFlowChrome(DragEventArgs e, ContinueUntilBlock flow, out Border chrome)
+    {
+        chrome = null!;
+        var current = e.OriginalSource as DependencyObject;
+        while (current is not null)
+        {
+            if (current is Border border
+                && border.Tag as string == "FlowChrome"
+                && ReferenceEquals(border.DataContext, flow))
+            {
+                chrome = border;
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        if (FindFlowChromeInList(flow) is { } found)
+        {
+            chrome = found;
+            return true;
+        }
+
+        return false;
+    }
+
+    private Border? FindFlowBody(DragEventArgs e, ContinueUntilBlock flow)
+    {
+        if (TryGetFlowChrome(e, flow, out var chrome))
+        {
+            return InsertionGapController.FindDescendantBorder(chrome, "FlowBody");
+        }
+
+        // Walk up from source looking for FlowBody with matching DataContext.
+        var current = e.OriginalSource as DependencyObject;
+        while (current is not null)
+        {
+            if (current is Border border
+                && border.Tag as string == "FlowBody"
+                && ReferenceEquals(border.DataContext, flow))
+            {
+                return border;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return FindFlowChromeInList(flow) is { } found
+            ? InsertionGapController.FindDescendantBorder(found, "FlowBody")
+            : null;
+    }
+
+    private Border? FindFlowChromeInList(ContinueUntilBlock flow)
+    {
+        if (!BlockTree.TryFindOwner(Vm!.Blocks, flow, out var owner, out var index))
+        {
+            return null;
+        }
+
+        var list = FindItemsControlForOwner(owner);
+        if (list?.ItemContainerGenerator.ContainerFromIndex(index) is not FrameworkElement container)
+        {
+            return null;
+        }
+
+        return InsertionGapController.FindDescendantBorder(container, "FlowChrome");
+    }
+
+    private static bool IsNearFlowVerticalEdge(FrameworkElement chrome, Point posInChrome)
+    {
+        var height = chrome.ActualHeight;
+        if (height <= FlowEdgePixels * 2)
+        {
+            // Tiny chrome: treat outer thirds as edges.
+            return posInChrome.Y < height / 3.0 || posInChrome.Y > height * 2.0 / 3.0;
+        }
+
+        return posInChrome.Y < FlowEdgePixels || posInChrome.Y > height - FlowEdgePixels;
     }
 
     private ItemsControl? FindItemsControlForOwner(ObservableCollection<MacroBlock> owner)

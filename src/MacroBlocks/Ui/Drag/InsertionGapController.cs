@@ -10,21 +10,41 @@ namespace MacroBlocks.Ui.Drag;
 /// Nudges items apart at the prospective drop index during a drag.
 /// Insert index is chosen from mouse Y against resting (un-nudged) slot positions
 /// so the gap itself does not fight hit-testing.
+/// Also highlights an empty Continue Until body so "drop inside" is obvious.
 /// </summary>
 internal sealed class InsertionGapController
 {
     public const double GapPixels = 30;
+    public const double EmptyBodyExpandedMinHeight = 96;
+    public const double EmptyBodyRestingMinHeight = 48;
+
+    private static readonly SolidColorBrush EmptyBodyHighlightBg =
+        CreateBrush(0xDB, 0xEA, 0xFE);
+    private static readonly SolidColorBrush EmptyBodyHighlightBorder =
+        CreateBrush(0x60, 0xA5, 0xFA);
+    private static readonly SolidColorBrush EmptyBodyRestingBg =
+        CreateBrush(0xF8, 0xFA, 0xFC);
+    private static readonly SolidColorBrush EmptyBodyRestingBorder =
+        CreateBrush(0xBF, 0xDB, 0xFE);
+    private static readonly SolidColorBrush InsertGapBorder =
+        CreateBrush(0x60, 0xA5, 0xFA);
 
     private ItemsControl? _activeList;
     private int _activeIndex = -1;
+    private Border? _emptyBody;
 
     public ObservableCollection<MacroBlock>? TargetOwner { get; private set; }
 
     public int InsertIndex { get; private set; } = -1;
 
+    public bool IsEmptyBodyTarget => _emptyBody is not null;
+
     public void Show(ItemsControl list, ObservableCollection<MacroBlock> owner, int insertIndex)
     {
-        if (ReferenceEquals(_activeList, list) && _activeIndex == insertIndex && ReferenceEquals(TargetOwner, owner))
+        if (ReferenceEquals(_activeList, list)
+            && _activeIndex == insertIndex
+            && ReferenceEquals(TargetOwner, owner)
+            && _emptyBody is null)
         {
             return;
         }
@@ -35,6 +55,28 @@ internal sealed class InsertionGapController
         _activeList = list;
         _activeIndex = InsertIndex;
         Apply(list, InsertIndex);
+    }
+
+    /// <summary>
+    /// Expands and tints an empty flow body to show the drop will nest inside.
+    /// </summary>
+    public void ShowEmptyBody(Border body, ObservableCollection<MacroBlock> owner)
+    {
+        if (ReferenceEquals(_emptyBody, body) && ReferenceEquals(TargetOwner, owner))
+        {
+            return;
+        }
+
+        ClearVisualOnly();
+        TargetOwner = owner;
+        InsertIndex = 0;
+        _activeList = null;
+        _activeIndex = 0;
+        _emptyBody = body;
+        body.MinHeight = EmptyBodyExpandedMinHeight;
+        body.Background = EmptyBodyHighlightBg;
+        body.BorderBrush = EmptyBodyHighlightBorder;
+        body.BorderThickness = new Thickness(2);
     }
 
     public void Clear()
@@ -111,6 +153,15 @@ internal sealed class InsertionGapController
         {
             Reset(_activeList);
         }
+
+        if (_emptyBody is not null)
+        {
+            _emptyBody.MinHeight = EmptyBodyRestingMinHeight;
+            _emptyBody.Background = EmptyBodyRestingBg;
+            _emptyBody.BorderBrush = EmptyBodyRestingBorder;
+            _emptyBody.BorderThickness = new Thickness(1);
+            _emptyBody = null;
+        }
     }
 
     private static bool TryGetRestingBounds(ItemsControl list, int index, out double top, out double bottom)
@@ -162,12 +213,12 @@ internal sealed class InsertionGapController
             if (i == insertIndex)
             {
                 chrome.Margin = new Thickness(baseMargin.Left, GapPixels, baseMargin.Right, baseMargin.Bottom);
-                chrome.BorderBrush = new SolidColorBrush(Color.FromRgb(0x60, 0xA5, 0xFA));
+                chrome.BorderBrush = InsertGapBorder;
             }
             else if (insertIndex == count && i == count - 1)
             {
                 chrome.Margin = new Thickness(baseMargin.Left, baseMargin.Top, baseMargin.Right, GapPixels);
-                chrome.BorderBrush = new SolidColorBrush(Color.FromRgb(0x60, 0xA5, 0xFA));
+                chrome.BorderBrush = InsertGapBorder;
             }
             else
             {
@@ -202,8 +253,8 @@ internal sealed class InsertionGapController
     private static void RestoreBorder(Border chrome)
     {
         chrome.BorderBrush = chrome.Tag as string == "FlowChrome"
-            ? new SolidColorBrush(Color.FromRgb(0x93, 0xC5, 0xFD))
-            : new SolidColorBrush(Color.FromRgb(0xE5, 0xE7, 0xEB));
+            ? CreateBrush(0x93, 0xC5, 0xFD)
+            : CreateBrush(0xE5, 0xE7, 0xEB);
     }
 
     private static Border? FindChrome(ItemsControl list, int index)
@@ -217,7 +268,7 @@ internal sealed class InsertionGapController
                ?? FindDescendantBorder(container, "FlowChrome");
     }
 
-    private static Border? FindDescendantBorder(DependencyObject root, string tag)
+    public static Border? FindDescendantBorder(DependencyObject root, string tag)
     {
         var count = VisualTreeHelper.GetChildrenCount(root);
         for (var i = 0; i < count; i++)
@@ -236,5 +287,12 @@ internal sealed class InsertionGapController
         }
 
         return null;
+    }
+
+    private static SolidColorBrush CreateBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
     }
 }

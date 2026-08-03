@@ -185,7 +185,8 @@
                         </Grid>
                     </Border>
 
-                    <Border Margin="14,0,8,8"
+                    <Border Tag="FlowBody"
+                            Margin="14,0,8,8"
                             Padding="8"
                             MinHeight="48"
                             Background="#F8FAFC"
