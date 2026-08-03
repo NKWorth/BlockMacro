@@ -11,27 +11,40 @@ namespace BlockMacro.ViewModels;
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly MacroPlaybackEngine _engine;
+    private readonly IScriptLibrary _library;
     private readonly ScreenPointPicker _pointPicker = new();
+    private MacroScript _script;
     private MacroBlock? _selectedBlock;
+    private MacroScript? _selectedLibraryScript;
     private string _status = "Ready";
     private bool _isRunning;
     private bool _loopForever;
     private bool _isRecordingLocation;
     private WindowState _windowStateBeforeRecord = WindowState.Normal;
     private string _keyPressEventKeyText = "F";
+    private string _scriptName = "Untitled Macro";
 
     public MainViewModel()
-        : this(new MacroPlaybackEngine(new Win32InputSimulator()))
+        : this(new JsonScriptLibrary())
     {
     }
 
-    public MainViewModel(MacroPlaybackEngine engine)
+    public MainViewModel(IScriptLibrary library)
+        : this(new MacroPlaybackEngine(new Win32InputSimulator(), library), library)
+    {
+    }
+
+    public MainViewModel(MacroPlaybackEngine engine, IScriptLibrary library)
     {
         _engine = engine;
-        Script = new MacroScript();
+        _library = library;
+        _script = new MacroScript();
+        _scriptName = _script.Name;
         AvailableEvents = [];
+        LibraryScripts = [];
 
-        Script.Blocks.CollectionChanged += OnBlocksChanged;
+        _script.Blocks.CollectionChanged += OnBlocksChanged;
+        _library.Changed += (_, _) => Application.Current.Dispatcher.Invoke(RefreshLibrary);
 
         _engine.Started += (_, _) =>
         {
@@ -63,6 +76,7 @@ public sealed class MainViewModel : ViewModelBase
         AddKeyPressCommand = new RelayCommand(AddKeyPress, CanEditScript);
         AddKeyPressEventCommand = new RelayCommand(AddKeyPressEvent, CanEditScript);
         AddContinueUntilCommand = new RelayCommand(AddContinueUntil, CanEditScript);
+        AddRunSubscriptCommand = new RelayCommand(AddRunSubscript, CanEditScript);
         RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => CanEditScript() && SelectedBlock is not null);
         MoveUpCommand = new RelayCommand(MoveUp, () => CanEditScript() && CanMoveSelected(-1));
         MoveDownCommand = new RelayCommand(MoveDown, () => CanEditScript() && CanMoveSelected(1));
@@ -73,13 +87,33 @@ public sealed class MainViewModel : ViewModelBase
             async () => await RecordMouseMoveLocationAsync(),
             () => !IsRunning && !IsRecordingLocation && SelectedMouseMove is not null);
         CancelRecordLocationCommand = new RelayCommand(CancelRecordLocation, () => IsRecordingLocation);
+        NewScriptCommand = new RelayCommand(NewScript, CanEditScript);
+        SaveScriptCommand = new RelayCommand(SaveScript, () => CanEditScript() && Blocks.Count > 0);
+        OpenLibraryScriptCommand = new RelayCommand(OpenLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
+        DeleteLibraryScriptCommand = new RelayCommand(DeleteLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
+
+        RefreshLibrary();
     }
 
-    public MacroScript Script { get; }
+    public MacroScript Script => _script;
 
-    public ObservableCollection<MacroBlock> Blocks => Script.Blocks;
+    public ObservableCollection<MacroBlock> Blocks => _script.Blocks;
 
     public ObservableCollection<EventBlock> AvailableEvents { get; }
+
+    public ObservableCollection<MacroScript> LibraryScripts { get; }
+
+    public string ScriptName
+    {
+        get => _scriptName;
+        set
+        {
+            if (SetProperty(ref _scriptName, value))
+            {
+                _script.Name = value;
+            }
+        }
+    }
 
     public MacroBlock? SelectedBlock
     {
@@ -104,13 +138,19 @@ public sealed class MainViewModel : ViewModelBase
                     OnPropertyChanged(nameof(KeyPressEventKeyText));
                 }
 
-                OnPropertyChanged(nameof(SelectedMouseMove));
-                OnPropertyChanged(nameof(HasMouseMoveSelection));
-                OnPropertyChanged(nameof(SelectedKeyPressEvent));
-                OnPropertyChanged(nameof(HasKeyPressEventSelection));
-                OnPropertyChanged(nameof(SelectedContinueUntil));
-                OnPropertyChanged(nameof(HasContinueUntilSelection));
-                OnPropertyChanged(nameof(SelectedContinueUntilEventId));
+                NotifySelectionProperties();
+                RefreshCommands();
+            }
+        }
+    }
+
+    public MacroScript? SelectedLibraryScript
+    {
+        get => _selectedLibraryScript;
+        set
+        {
+            if (SetProperty(ref _selectedLibraryScript, value))
+            {
                 RefreshCommands();
             }
         }
@@ -124,6 +164,9 @@ public sealed class MainViewModel : ViewModelBase
 
     public ContinueUntilBlock? SelectedContinueUntil => SelectedBlock as ContinueUntilBlock;
     public bool HasContinueUntilSelection => SelectedContinueUntil is not null;
+
+    public RunSubscriptBlock? SelectedRunSubscript => SelectedBlock as RunSubscriptBlock;
+    public bool HasRunSubscriptSelection => SelectedRunSubscript is not null;
 
     public Guid? SelectedContinueUntilEventId
     {
@@ -139,6 +182,24 @@ public sealed class MainViewModel : ViewModelBase
                 ? AvailableEvents.FirstOrDefault(e => e.Id == id)
                 : null;
             SelectContinueUntilEvent(evt);
+            OnPropertyChanged();
+        }
+    }
+
+    public Guid? SelectedRunSubscriptId
+    {
+        get => SelectedRunSubscript?.ScriptId;
+        set
+        {
+            if (SelectedRunSubscript is null)
+            {
+                return;
+            }
+
+            var script = value is { } id
+                ? LibraryScripts.FirstOrDefault(s => s.Id == id)
+                : null;
+            SelectRunSubscript(script);
             OnPropertyChanged();
         }
     }
@@ -191,7 +252,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _loopForever, value))
             {
-                Script.LoopForever = value;
+                _script.LoopForever = value;
             }
         }
     }
@@ -202,6 +263,7 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand AddKeyPressCommand { get; }
     public ICommand AddKeyPressEventCommand { get; }
     public ICommand AddContinueUntilCommand { get; }
+    public ICommand AddRunSubscriptCommand { get; }
     public ICommand RemoveSelectedCommand { get; }
     public ICommand MoveUpCommand { get; }
     public ICommand MoveDownCommand { get; }
@@ -210,8 +272,26 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand StopCommand { get; }
     public ICommand RecordMouseMoveLocationCommand { get; }
     public ICommand CancelRecordLocationCommand { get; }
+    public ICommand NewScriptCommand { get; }
+    public ICommand SaveScriptCommand { get; }
+    public ICommand OpenLibraryScriptCommand { get; }
+    public ICommand DeleteLibraryScriptCommand { get; }
 
     private bool CanEditScript() => !IsRunning && !IsRecordingLocation;
+
+    private void NotifySelectionProperties()
+    {
+        OnPropertyChanged(nameof(SelectedMouseMove));
+        OnPropertyChanged(nameof(HasMouseMoveSelection));
+        OnPropertyChanged(nameof(SelectedKeyPressEvent));
+        OnPropertyChanged(nameof(HasKeyPressEventSelection));
+        OnPropertyChanged(nameof(SelectedContinueUntil));
+        OnPropertyChanged(nameof(HasContinueUntilSelection));
+        OnPropertyChanged(nameof(SelectedContinueUntilEventId));
+        OnPropertyChanged(nameof(SelectedRunSubscript));
+        OnPropertyChanged(nameof(HasRunSubscriptSelection));
+        OnPropertyChanged(nameof(SelectedRunSubscriptId));
+    }
 
     private void AddDelay()
     {
@@ -266,6 +346,20 @@ public sealed class MainViewModel : ViewModelBase
 
         Blocks.Add(block);
         Blocks.Add(end);
+        SelectedBlock = block;
+    }
+
+    private void AddRunSubscript()
+    {
+        var block = new RunSubscriptBlock();
+        var candidates = LibraryScripts.Where(s => s.Id != _script.Id).ToList();
+        if (candidates.Count > 0)
+        {
+            block.ScriptId = candidates[0].Id;
+            block.ScriptName = candidates[0].Name;
+        }
+
+        Blocks.Add(block);
         SelectedBlock = block;
     }
 
@@ -354,6 +448,112 @@ public sealed class MainViewModel : ViewModelBase
         SelectedBlock = null;
     }
 
+    private void NewScript()
+    {
+        ReplaceWorkingScript(new MacroScript());
+        Status = "New script";
+    }
+
+    private void SaveScript()
+    {
+        if (Blocks.Count == 0)
+        {
+            return;
+        }
+
+        _script.Name = string.IsNullOrWhiteSpace(ScriptName) ? "Untitled Macro" : ScriptName.Trim();
+        ScriptName = _script.Name;
+        _script.LoopForever = LoopForever;
+        _library.Save(_script);
+        RefreshLibrary();
+        SelectedLibraryScript = LibraryScripts.FirstOrDefault(s => s.Id == _script.Id);
+        SyncRunSubscriptLabels();
+        Status = $"Saved '{_script.Name}' to library";
+    }
+
+    private void OpenLibraryScript()
+    {
+        if (SelectedLibraryScript is null)
+        {
+            return;
+        }
+
+        var loaded = _library.Get(SelectedLibraryScript.Id);
+        if (loaded is null)
+        {
+            Status = "Could not open script from library";
+            RefreshLibrary();
+            return;
+        }
+
+        ReplaceWorkingScript(loaded);
+        Status = $"Opened '{loaded.Name}'";
+    }
+
+    private void DeleteLibraryScript()
+    {
+        if (SelectedLibraryScript is null)
+        {
+            return;
+        }
+
+        var id = SelectedLibraryScript.Id;
+        var name = SelectedLibraryScript.Name;
+        if (!_library.Delete(id))
+        {
+            Status = "Could not delete library script";
+            return;
+        }
+
+        if (_script.Id == id)
+        {
+            // Keep editing a copy, but assign a new id so the next save creates a new entry.
+            _script.Id = Guid.NewGuid();
+        }
+
+        RefreshLibrary();
+        SyncRunSubscriptLabels();
+        Status = $"Deleted '{name}' from library";
+    }
+
+    private void ReplaceWorkingScript(MacroScript script)
+    {
+        _script.Blocks.CollectionChanged -= OnBlocksChanged;
+        _script = script;
+        _script.Blocks.CollectionChanged += OnBlocksChanged;
+
+        _scriptName = _script.Name;
+        _loopForever = _script.LoopForever;
+        SelectedBlock = null;
+
+        OnPropertyChanged(nameof(Script));
+        OnPropertyChanged(nameof(Blocks));
+        OnPropertyChanged(nameof(ScriptName));
+        OnPropertyChanged(nameof(LoopForever));
+
+        RefreshAvailableEvents();
+        SyncContinueUntilLabels();
+        SyncRunSubscriptLabels();
+        RefreshCommands();
+    }
+
+    private void RefreshLibrary()
+    {
+        var selectedId = SelectedLibraryScript?.Id;
+        LibraryScripts.Clear();
+        foreach (var script in _library.List())
+        {
+            LibraryScripts.Add(script);
+        }
+
+        SelectedLibraryScript = selectedId is { } id
+            ? LibraryScripts.FirstOrDefault(s => s.Id == id)
+            : null;
+
+        SyncRunSubscriptLabels();
+        OnPropertyChanged(nameof(SelectedRunSubscriptId));
+    }
+
     private async Task RunAsync()
     {
         if (Blocks.Count == 0)
@@ -361,12 +561,13 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        Script.LoopForever = LoopForever;
+        _script.LoopForever = LoopForever;
+        _script.Name = ScriptName;
         Status = "Starting…";
 
         try
         {
-            await _engine.RunAsync(Script);
+            await _engine.RunAsync(_script);
         }
         catch (Exception ex)
         {
@@ -440,6 +641,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         RefreshAvailableEvents();
         SyncContinueUntilLabels();
+        SyncRunSubscriptLabels();
     }
 
     private void OnSelectedBlockPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -477,10 +679,23 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Called from the Continue Until inspector when the user picks an event.
-    /// </summary>
-    public void SelectContinueUntilEvent(EventBlock? evt)
+    private void SyncRunSubscriptLabels()
+    {
+        var library = LibraryScripts.ToDictionary(s => s.Id);
+        foreach (var call in Blocks.OfType<RunSubscriptBlock>())
+        {
+            if (call.ScriptId is { } id && library.TryGetValue(id, out var script))
+            {
+                call.ScriptName = script.Name;
+            }
+            else if (call.ScriptId is not null)
+            {
+                call.ScriptName = "(missing script)";
+            }
+        }
+    }
+
+    private void SelectContinueUntilEvent(EventBlock? evt)
     {
         if (SelectedContinueUntil is null)
         {
@@ -496,6 +711,24 @@ public sealed class MainViewModel : ViewModelBase
 
         SelectedContinueUntil.EventBlockId = evt.Id;
         SelectedContinueUntil.EventLabel = evt.Name;
+    }
+
+    private void SelectRunSubscript(MacroScript? script)
+    {
+        if (SelectedRunSubscript is null)
+        {
+            return;
+        }
+
+        if (script is null)
+        {
+            SelectedRunSubscript.ScriptId = null;
+            SelectedRunSubscript.ScriptName = "(no script)";
+            return;
+        }
+
+        SelectedRunSubscript.ScriptId = script.Id;
+        SelectedRunSubscript.ScriptName = script.Name;
     }
 
     private static ushort ResolveVirtualKey(string label)
@@ -544,6 +777,7 @@ public sealed class MainViewModel : ViewModelBase
         (AddKeyPressCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (AddKeyPressEventCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (AddContinueUntilCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (AddRunSubscriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (RemoveSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (MoveUpCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (MoveDownCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -552,5 +786,9 @@ public sealed class MainViewModel : ViewModelBase
         (StopCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (RecordMouseMoveLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (CancelRecordLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (NewScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (SaveScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (OpenLibraryScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (DeleteLibraryScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 }

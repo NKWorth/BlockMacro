@@ -5,12 +5,14 @@ namespace BlockMacro.Services;
 public sealed class MacroPlaybackEngine
 {
     private readonly IInputSimulator _input;
+    private readonly IScriptLibrary _library;
     private CancellationTokenSource? _cts;
     private Task? _running;
 
-    public MacroPlaybackEngine(IInputSimulator input)
+    public MacroPlaybackEngine(IInputSimulator input, IScriptLibrary library)
     {
         _input = input;
+        _library = library;
     }
 
     public bool IsRunning => _running is { IsCompleted: false };
@@ -36,24 +38,32 @@ public sealed class MacroPlaybackEngine
 
             try
             {
-                var blocks = script.Blocks.ToArray();
-                ArmEvents(blocks, runtime);
+                var reachable = CollectReachableScripts(script).ToList();
+                foreach (var evt in reachable.SelectMany(s => s.Blocks.OfType<EventBlock>()))
+                {
+                    runtime.RegisterEvent(evt.Id);
+                }
 
-                watcher = new KeyPressEventWatcher(runtime, blocks.OfType<KeyPressEventBlock>());
+                var keyEvents = reachable.SelectMany(s => s.Blocks.OfType<KeyPressEventBlock>()).ToList();
+                watcher = new KeyPressEventWatcher(runtime, keyEvents);
                 watcher.Start();
 
                 Started?.Invoke(this, EventArgs.Empty);
                 StatusChanged?.Invoke(this, "Running");
 
+                var callStack = new Stack<Guid>();
+                callStack.Push(script.Id);
+
                 do
                 {
-                    // Fresh event flags each outer loop iteration when Loop Forever is on.
-                    foreach (var evt in blocks.OfType<EventBlock>())
+                    foreach (var evt in reachable.SelectMany(s => s.Blocks.OfType<EventBlock>()))
                     {
                         runtime.Reset(evt.Id);
                     }
 
-                    await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, token).ConfigureAwait(false);
+                    var blocks = script.Blocks.ToArray();
+                    await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, callStack, token)
+                        .ConfigureAwait(false);
                 }
                 while (script.LoopForever && !token.IsCancellationRequested);
             }
@@ -77,11 +87,35 @@ public sealed class MacroPlaybackEngine
         _cts?.Cancel();
     }
 
-    private static void ArmEvents(IReadOnlyList<MacroBlock> blocks, ScriptRuntime runtime)
+    private IEnumerable<MacroScript> CollectReachableScripts(MacroScript root)
     {
-        foreach (var evt in blocks.OfType<EventBlock>())
+        var visited = new HashSet<Guid>();
+        var queue = new Queue<MacroScript>();
+        queue.Enqueue(root);
+
+        while (queue.Count > 0)
         {
-            runtime.RegisterEvent(evt.Id);
+            var current = queue.Dequeue();
+            if (!visited.Add(current.Id))
+            {
+                continue;
+            }
+
+            yield return current;
+
+            foreach (var call in current.Blocks.OfType<RunSubscriptBlock>())
+            {
+                if (call.ScriptId is not { } id)
+                {
+                    continue;
+                }
+
+                var sub = _library.Get(id);
+                if (sub is not null)
+                {
+                    queue.Enqueue(sub);
+                }
+            }
         }
     }
 
@@ -90,6 +124,7 @@ public sealed class MacroPlaybackEngine
         int start,
         int end,
         ScriptRuntime runtime,
+        Stack<Guid> callStack,
         CancellationToken token)
     {
         for (var i = start; i < end;)
@@ -100,17 +135,21 @@ public sealed class MacroPlaybackEngine
             switch (block)
             {
                 case EventBlock:
-                    // Declarative — armed for the whole run, nothing to execute.
                     i++;
                     break;
 
                 case ContinueUntilBlock continueUntil:
-                    i = await ExecuteContinueUntilAsync(blocks, i, end, continueUntil, runtime, token)
+                    i = await ExecuteContinueUntilAsync(blocks, i, end, continueUntil, runtime, callStack, token)
                         .ConfigureAwait(false);
                     break;
 
                 case EndContinueBlock:
-                    // Orphaned end marker; skip.
+                    i++;
+                    break;
+
+                case RunSubscriptBlock call:
+                    StatusChanged?.Invoke(this, $"Running: {call.DisplayName} — {call.Summary}");
+                    await ExecuteSubscriptAsync(call, runtime, callStack, token).ConfigureAwait(false);
                     i++;
                     break;
 
@@ -123,12 +162,46 @@ public sealed class MacroPlaybackEngine
         }
     }
 
+    private async Task ExecuteSubscriptAsync(
+        RunSubscriptBlock call,
+        ScriptRuntime runtime,
+        Stack<Guid> callStack,
+        CancellationToken token)
+    {
+        if (call.ScriptId is not { } scriptId)
+        {
+            throw new InvalidOperationException("Run Subscript has no script selected.");
+        }
+
+        if (callStack.Contains(scriptId))
+        {
+            throw new InvalidOperationException(
+                $"Circular subscript reference detected while calling '{call.ScriptName}'.");
+        }
+
+        var sub = _library.Get(scriptId)
+            ?? throw new InvalidOperationException($"Subscript '{call.ScriptName}' was not found in the library.");
+
+        callStack.Push(scriptId);
+        try
+        {
+            var blocks = sub.Blocks.ToArray();
+            await ExecuteRangeAsync(blocks, 0, blocks.Length, runtime, callStack, token)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            callStack.Pop();
+        }
+    }
+
     private async Task<int> ExecuteContinueUntilAsync(
         IReadOnlyList<MacroBlock> blocks,
         int continueIndex,
         int rangeEnd,
         ContinueUntilBlock continueUntil,
         ScriptRuntime runtime,
+        Stack<Guid> callStack,
         CancellationToken token)
     {
         var endIndex = FindMatchingEndContinue(blocks, continueIndex, rangeEnd);
@@ -146,7 +219,6 @@ public sealed class MacroPlaybackEngine
         var bodyStart = continueIndex + 1;
         var bodyEnd = endIndex;
 
-        // Wait for a fresh press of the watched event for this region.
         runtime.Reset(eventId);
         StatusChanged?.Invoke(this, $"Continue until {continueUntil.EventLabel}…");
 
@@ -156,16 +228,15 @@ public sealed class MacroPlaybackEngine
 
             if (bodyStart >= bodyEnd)
             {
-                // No body — idle-wait for the event.
                 await Task.Delay(25, token).ConfigureAwait(false);
                 continue;
             }
 
-            await ExecuteRangeAsync(blocks, bodyStart, bodyEnd, runtime, token).ConfigureAwait(false);
+            await ExecuteRangeAsync(blocks, bodyStart, bodyEnd, runtime, callStack, token)
+                .ConfigureAwait(false);
 
             if (!runtime.IsTriggered(eventId))
             {
-                // Brief yield so a tight action loop still lets the key hook run.
                 await Task.Delay(1, token).ConfigureAwait(false);
             }
         }
