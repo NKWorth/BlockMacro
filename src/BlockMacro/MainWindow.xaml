@@ -209,18 +209,64 @@
                 </DockPanel>
             </Border>
 
-            <!-- Inspector placeholder -->
+            <!-- Inspector -->
             <Border Grid.Column="4" Style="{StaticResource PanelCard}">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top"
                                Text="Inspector"
                                Style="{StaticResource SectionTitle}" />
+
                     <TextBlock TextWrapping="Wrap"
                                Foreground="#6B7280"
                                FontSize="12"
-                               LineHeight="18">
-                        Select a block to edit its properties. Property editors for coordinates, keys, and delays will plug in here next.
+                               LineHeight="18"
+                               Visibility="{Binding SelectedBlock, Converter={x:Static vm:NullToVisibilityConverter.WhenNull}}">
+                        Select a block to edit its properties.
                     </TextBlock>
+
+                    <!-- Mouse Move editor -->
+                    <StackPanel Visibility="{Binding HasMouseMoveSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <TextBlock Text="{Binding SelectedMouseMove.DisplayName}"
+                                   FontWeight="SemiBold"
+                                   Foreground="#111827"
+                                   Margin="0,0,0,12" />
+
+                        <TextBlock Text="X"
+                                   FontSize="11"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding SelectedMouseMove.X, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,10"
+                                 Padding="6,4"
+                                 IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+
+                        <TextBlock Text="Y"
+                                   FontSize="11"
+                                   Foreground="#6B7280"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding SelectedMouseMove.Y, UpdateSourceTrigger=PropertyChanged}"
+                                 Margin="0,0,0,14"
+                                 Padding="6,4"
+                                 IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+
+                        <Button Content="Record Location"
+                                Style="{StaticResource PrimaryButton}"
+                                Command="{Binding RecordMouseMoveLocationCommand}"
+                                Margin="0,0,0,8"
+                                Visibility="{Binding IsRecordingLocation, Converter={x:Static vm:BoolToVisibilityConverter.Inverted}}" />
+
+                        <Button Content="Cancel Recording"
+                                Style="{StaticResource DangerButton}"
+                                Command="{Binding CancelRecordLocationCommand}"
+                                Margin="0,0,0,8"
+                                Visibility="{Binding IsRecordingLocation, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}" />
+
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="#6B7280"
+                                   FontSize="11"
+                                   LineHeight="16"
+                                   Text="Enter coordinates manually, or record by clicking anywhere on screen. Esc cancels recording." />
+                    </StackPanel>
                 </DockPanel>
             </Border>
         </Grid>

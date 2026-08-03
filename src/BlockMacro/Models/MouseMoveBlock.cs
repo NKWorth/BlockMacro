@@ -2,8 +2,32 @@ namespace BlockMacro.Models;
 
 public sealed class MouseMoveBlock : MacroBlock
 {
-    public int X { get; set; }
-    public int Y { get; set; }
+    private int _x;
+    private int _y;
+
+    public int X
+    {
+        get => _x;
+        set
+        {
+            if (SetField(ref _x, value))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
+
+    public int Y
+    {
+        get => _y;
+        set
+        {
+            if (SetField(ref _y, value))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
 
     public override string DisplayName => "Mouse Move";
 

@@ -9,10 +9,13 @@ namespace BlockMacro.ViewModels;
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly MacroPlaybackEngine _engine;
+    private readonly ScreenPointPicker _pointPicker = new();
     private MacroBlock? _selectedBlock;
     private string _status = "Ready";
     private bool _isRunning;
     private bool _loopForever;
+    private bool _isRecordingLocation;
+    private WindowState _windowStateBeforeRecord = WindowState.Normal;
 
     public MainViewModel()
         : this(new MacroPlaybackEngine(new Win32InputSimulator()))
@@ -48,16 +51,20 @@ public sealed class MainViewModel : ViewModelBase
             Application.Current.Dispatcher.Invoke(() => Status = message);
         };
 
-        AddDelayCommand = new RelayCommand(AddDelay, () => !IsRunning);
-        AddMouseClickCommand = new RelayCommand(AddMouseClick, () => !IsRunning);
-        AddMouseMoveCommand = new RelayCommand(AddMouseMove, () => !IsRunning);
-        AddKeyPressCommand = new RelayCommand(AddKeyPress, () => !IsRunning);
-        RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => !IsRunning && SelectedBlock is not null);
-        MoveUpCommand = new RelayCommand(MoveUp, () => !IsRunning && CanMoveSelected(-1));
-        MoveDownCommand = new RelayCommand(MoveDown, () => !IsRunning && CanMoveSelected(1));
-        ClearCommand = new RelayCommand(Clear, () => !IsRunning && Blocks.Count > 0);
-        RunCommand = new RelayCommand(async () => await RunAsync(), () => !IsRunning && Blocks.Count > 0);
+        AddDelayCommand = new RelayCommand(AddDelay, () => !IsRunning && !IsRecordingLocation);
+        AddMouseClickCommand = new RelayCommand(AddMouseClick, () => !IsRunning && !IsRecordingLocation);
+        AddMouseMoveCommand = new RelayCommand(AddMouseMove, () => !IsRunning && !IsRecordingLocation);
+        AddKeyPressCommand = new RelayCommand(AddKeyPress, () => !IsRunning && !IsRecordingLocation);
+        RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => !IsRunning && !IsRecordingLocation && SelectedBlock is not null);
+        MoveUpCommand = new RelayCommand(MoveUp, () => !IsRunning && !IsRecordingLocation && CanMoveSelected(-1));
+        MoveDownCommand = new RelayCommand(MoveDown, () => !IsRunning && !IsRecordingLocation && CanMoveSelected(1));
+        ClearCommand = new RelayCommand(Clear, () => !IsRunning && !IsRecordingLocation && Blocks.Count > 0);
+        RunCommand = new RelayCommand(async () => await RunAsync(), () => !IsRunning && !IsRecordingLocation && Blocks.Count > 0);
         StopCommand = new RelayCommand(Stop, () => IsRunning);
+        RecordMouseMoveLocationCommand = new RelayCommand(
+            async () => await RecordMouseMoveLocationAsync(),
+            () => !IsRunning && !IsRecordingLocation && SelectedMouseMove is not null);
+        CancelRecordLocationCommand = new RelayCommand(CancelRecordLocation, () => IsRecordingLocation);
     }
 
     public MacroScript Script { get; }
@@ -71,10 +78,16 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (SetProperty(ref _selectedBlock, value))
             {
+                OnPropertyChanged(nameof(SelectedMouseMove));
+                OnPropertyChanged(nameof(HasMouseMoveSelection));
                 RefreshCommands();
             }
         }
     }
+
+    public MouseMoveBlock? SelectedMouseMove => SelectedBlock as MouseMoveBlock;
+
+    public bool HasMouseMoveSelection => SelectedMouseMove is not null;
 
     public string Status
     {
@@ -86,6 +99,18 @@ public sealed class MainViewModel : ViewModelBase
     {
         get => _isRunning;
         private set => SetProperty(ref _isRunning, value);
+    }
+
+    public bool IsRecordingLocation
+    {
+        get => _isRecordingLocation;
+        private set
+        {
+            if (SetProperty(ref _isRecordingLocation, value))
+            {
+                RefreshCommands();
+            }
+        }
     }
 
     public bool LoopForever
@@ -110,6 +135,8 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand ClearCommand { get; }
     public ICommand RunCommand { get; }
     public ICommand StopCommand { get; }
+    public ICommand RecordMouseMoveLocationCommand { get; }
+    public ICommand CancelRecordLocationCommand { get; }
 
     private void AddDelay()
     {
@@ -225,6 +252,60 @@ public sealed class MainViewModel : ViewModelBase
         Status = "Stopping…";
     }
 
+    private async Task RecordMouseMoveLocationAsync()
+    {
+        if (SelectedMouseMove is null || IsRecordingLocation)
+        {
+            return;
+        }
+
+        var target = SelectedMouseMove;
+        var window = Application.Current.MainWindow;
+        IsRecordingLocation = true;
+        Status = "Click anywhere to set the mouse location (Esc to cancel)…";
+
+        if (window is not null)
+        {
+            _windowStateBeforeRecord = window.WindowState;
+            window.WindowState = WindowState.Minimized;
+        }
+
+        try
+        {
+            var point = await _pointPicker.PickNextClickAsync();
+            if (point is { } captured && ReferenceEquals(SelectedMouseMove, target))
+            {
+                target.X = captured.X;
+                target.Y = captured.Y;
+                Status = $"Location set to ({captured.X}, {captured.Y})";
+            }
+            else if (point is null)
+            {
+                Status = "Location recording cancelled";
+            }
+        }
+        catch (Exception ex)
+        {
+            Status = $"Record failed: {ex.Message}";
+        }
+        finally
+        {
+            IsRecordingLocation = false;
+            if (window is not null)
+            {
+                window.WindowState = _windowStateBeforeRecord == WindowState.Minimized
+                    ? WindowState.Normal
+                    : _windowStateBeforeRecord;
+                window.Activate();
+            }
+        }
+    }
+
+    private void CancelRecordLocation()
+    {
+        _pointPicker.Cancel();
+    }
+
     private void RefreshCommands()
     {
         (AddDelayCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -237,5 +318,7 @@ public sealed class MainViewModel : ViewModelBase
         (ClearCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (RunCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (StopCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (RecordMouseMoveLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (CancelRecordLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 }
