@@ -3,14 +3,91 @@ using System.Collections.ObjectModel;
 namespace MacroBlocks.Models;
 
 /// <summary>
-/// Converts legacy flat Continue Until / End Continue markers into nested Children.
+/// Converts legacy flat Continue Until / End Continue markers into nested Children,
+/// and absorbs legacy EventBlockId references into owned event slots.
 /// </summary>
 public static class ScriptMigrator
 {
     public static List<MacroBlock> ToNested(IReadOnlyList<MacroBlock> flat)
     {
         var (blocks, _) = ParseRange(flat, 0, flat.Count);
+        AbsorbEventSlots(blocks);
         return blocks;
+    }
+
+    public static void AbsorbEventSlots(IList<MacroBlock> root)
+    {
+        // Snapshot flows first — moving events mutates collections.
+        foreach (var flow in EnumerateFlows(root).ToList())
+        {
+            if (flow.EventSlot is not null)
+            {
+                flow.EventLabel = flow.EventSlot.Name;
+                flow.ClearLegacyEventBlockId();
+                continue;
+            }
+
+            if (flow.LegacyEventBlockId is not { } id)
+            {
+                continue;
+            }
+
+            if (!TryRemoveEventById(root, id, out var evt))
+            {
+                flow.EventLabel = "(missing event)";
+                flow.ClearLegacyEventBlockId();
+                continue;
+            }
+
+            flow.EventSlot = evt;
+            flow.ClearLegacyEventBlockId();
+        }
+    }
+
+    private static IEnumerable<ContinueUntilBlock> EnumerateFlows(IEnumerable<MacroBlock> blocks)
+    {
+        foreach (var block in blocks)
+        {
+            if (block is ContinueUntilBlock flow)
+            {
+                yield return flow;
+                foreach (var nested in EnumerateFlows(flow.Children))
+                {
+                    yield return nested;
+                }
+            }
+        }
+    }
+
+    private static bool TryRemoveEventById(IList<MacroBlock> blocks, Guid id, out EventBlock evt)
+    {
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            if (blocks[i] is EventBlock found && found.Id == id)
+            {
+                evt = found;
+                blocks.RemoveAt(i);
+                return true;
+            }
+
+            if (blocks[i] is ContinueUntilBlock flow)
+            {
+                if (flow.EventSlot?.Id == id)
+                {
+                    // Already owned by some flow; leave it (caller only runs when slot empty).
+                    evt = null!;
+                    return false;
+                }
+
+                if (TryRemoveEventById(flow.Children, id, out evt))
+                {
+                    return true;
+                }
+            }
+        }
+
+        evt = null!;
+        return false;
     }
 
     private static (List<MacroBlock> Blocks, int NextIndex) ParseRange(
@@ -50,7 +127,7 @@ public static class ScriptMigrator
     {
         if (continueUntil.Children.Count > 0)
         {
-            var nested = ToNested(continueUntil.Children.ToList());
+            var nested = ParseRange(continueUntil.Children.ToList(), 0, continueUntil.Children.Count).Blocks;
             continueUntil.Children.Clear();
             foreach (var child in nested)
             {

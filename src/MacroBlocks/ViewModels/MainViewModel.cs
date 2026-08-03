@@ -153,6 +153,11 @@ public sealed class MainViewModel : ViewModelBase
                 }
 
                 NotifySelectionProperties();
+                using (_history.ApplyScope())
+                {
+                    RefreshAvailableEvents();
+                }
+
                 RefreshCommands();
             }
         }
@@ -368,14 +373,6 @@ public sealed class MainViewModel : ViewModelBase
     private void AddContinueUntil() => Mutate(() =>
     {
         var block = new ContinueUntilBlock();
-
-        if (AvailableEvents.Count > 0)
-        {
-            var evt = AvailableEvents[0];
-            block.EventBlockId = evt.Id;
-            block.EventLabel = evt.Name;
-        }
-
         Blocks.Add(block);
         EnsureTreeSubscriptions(block.Children);
         SelectedBlock = block;
@@ -397,18 +394,28 @@ public sealed class MainViewModel : ViewModelBase
 
     private void RemoveSelected()
     {
-        if (SelectedBlock is null
-            || !BlockTree.TryFindOwner(Blocks, SelectedBlock, out var owner, out var index))
+        if (SelectedBlock is null || !BlockTree.TryLocate(Blocks, SelectedBlock, out var location))
         {
             return;
         }
 
         Mutate(() =>
         {
-            owner.RemoveAt(index);
-            SelectedBlock = owner.Count == 0
-                ? null
-                : owner[Math.Clamp(index, 0, owner.Count - 1)];
+            switch (location)
+            {
+                case EventSlotLocation slot:
+                    slot.Flow.EventSlot = null;
+                    SelectedBlock = slot.Flow;
+                    Status = "Removed event from Continue Until";
+                    break;
+
+                case CollectionLocation col:
+                    col.Owner.RemoveAt(col.Index);
+                    SelectedBlock = col.Owner.Count == 0
+                        ? null
+                        : col.Owner[Math.Clamp(col.Index, 0, col.Owner.Count - 1)];
+                    break;
+            }
         });
     }
 
@@ -712,6 +719,11 @@ public sealed class MainViewModel : ViewModelBase
             TrackBlock(block);
             if (block is ContinueUntilBlock flow)
             {
+                if (flow.EventSlot is not null)
+                {
+                    TrackBlock(flow.EventSlot);
+                }
+
                 EnsureTreeSubscriptions(flow.Children);
             }
         }
@@ -763,9 +775,15 @@ public sealed class MainViewModel : ViewModelBase
     private void RefreshAvailableEvents()
     {
         AvailableEvents.Clear();
-        foreach (var evt in BlockTree.EnumerateEvents(Blocks))
+        foreach (var evt in BlockTree.EnumerateFreeEvents(Blocks))
         {
             AvailableEvents.Add(evt);
+        }
+
+        if (SelectedContinueUntil?.EventSlot is { } slotted
+            && AvailableEvents.All(e => e.Id != slotted.Id))
+        {
+            AvailableEvents.Insert(0, slotted);
         }
 
         OnPropertyChanged(nameof(AvailableEvents));
@@ -773,17 +791,9 @@ public sealed class MainViewModel : ViewModelBase
 
     private void SyncContinueUntilLabels()
     {
-        var events = BlockTree.EnumerateEvents(Blocks).ToDictionary(e => e.Id);
         foreach (var cont in BlockTree.Enumerate(Blocks).OfType<ContinueUntilBlock>())
         {
-            if (cont.EventBlockId is { } id && events.TryGetValue(id, out var evt))
-            {
-                cont.EventLabel = evt.Name;
-            }
-            else if (cont.EventBlockId is not null)
-            {
-                cont.EventLabel = "(missing event)";
-            }
+            cont.EventLabel = cont.EventSlot?.Name ?? "(no event)";
         }
     }
 
@@ -818,8 +828,7 @@ public sealed class MainViewModel : ViewModelBase
         ObservableCollection<MacroBlock> targetOwner,
         int targetIndex)
     {
-        if (!CanEditScript()
-            || !BlockTree.TryFindOwner(Blocks, block, out var sourceOwner, out var sourceIndex))
+        if (!CanEditScript() || !BlockTree.TryLocate(Blocks, block, out var location))
         {
             return;
         }
@@ -830,50 +839,36 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        if (ReferenceEquals(sourceOwner, targetOwner))
+        if (block is EventBlock && IsEventBodyCollection(targetOwner))
         {
-            var to = targetIndex;
-            if (sourceIndex < to)
-            {
-                to--;
-            }
-
-            to = Math.Clamp(to, 0, targetOwner.Count - 1);
-            if (sourceIndex == to)
-            {
-                return;
-            }
+            Status = "Events belong in a Continue Until event slot, not the body";
+            return;
         }
 
         Mutate(() =>
         {
-            if (!BlockTree.TryFindOwner(Blocks, block, out sourceOwner, out sourceIndex))
+            if (!BlockTree.TryLocate(Blocks, block, out location))
             {
                 return;
             }
 
-            if (ReferenceEquals(sourceOwner, targetOwner))
-            {
-                var to = targetIndex;
-                if (sourceIndex < to)
-                {
-                    to--;
-                }
+            DetachBlock(location);
 
-                to = Math.Clamp(to, 0, targetOwner.Count - 1);
-                if (sourceIndex != to)
-                {
-                    targetOwner.Move(sourceIndex, to);
-                }
-            }
-            else
+            var insertAt = Math.Clamp(targetIndex, 0, targetOwner.Count);
+            if (location is CollectionLocation col
+                && ReferenceEquals(col.Owner, targetOwner)
+                && col.Index < insertAt)
             {
-                sourceOwner.RemoveAt(sourceIndex);
-                var insertAt = Math.Clamp(targetIndex, 0, targetOwner.Count);
-                targetOwner.Insert(insertAt, block);
-                if (block is ContinueUntilBlock nested)
+                insertAt = Math.Clamp(insertAt - 1, 0, targetOwner.Count);
+            }
+
+            targetOwner.Insert(insertAt, block);
+            if (block is ContinueUntilBlock nested)
+            {
+                EnsureTreeSubscriptions(nested.Children);
+                if (nested.EventSlot is not null)
                 {
-                    EnsureTreeSubscriptions(nested.Children);
+                    TrackBlock(nested.EventSlot);
                 }
             }
 
@@ -904,6 +899,12 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
+        if (kind is "KeyPressEvent" && IsEventBodyCollection(owner))
+        {
+            Status = "Drop events onto a Continue Until event slot";
+            return;
+        }
+
         var block = CreatePaletteBlock(kind);
         if (block is null)
         {
@@ -917,12 +918,6 @@ public sealed class MainViewModel : ViewModelBase
             if (block is ContinueUntilBlock flow)
             {
                 EnsureTreeSubscriptions(flow.Children);
-                if (AvailableEvents.Count > 0)
-                {
-                    var evt = AvailableEvents[0];
-                    flow.EventBlockId = evt.Id;
-                    flow.EventLabel = evt.Name;
-                }
             }
 
             SelectedBlock = block;
@@ -956,7 +951,10 @@ public sealed class MainViewModel : ViewModelBase
             _ => (kind, string.Empty)
         };
 
-    public void AssignEventToContinueUntil(ContinueUntilBlock flow, EventBlock? evt)
+    /// <summary>
+    /// Places an existing event into a Continue Until event slot (ejecting any previous occupant).
+    /// </summary>
+    public void PlaceEventInSlot(ContinueUntilBlock flow, EventBlock? evt)
     {
         if (!CanEditScript())
         {
@@ -967,21 +965,36 @@ public sealed class MainViewModel : ViewModelBase
         {
             if (evt is null)
             {
-                flow.EventBlockId = null;
-                flow.EventLabel = "(no event)";
-                Status = "Cleared Continue Until event";
+                EjectEventSlot(flow);
+                Status = "Cleared Continue Until event slot";
                 return;
             }
 
-            flow.EventBlockId = evt.Id;
-            flow.EventLabel = evt.Name;
-            SelectedBlock = flow;
-            Status = $"Assigned '{evt.Name}' to Continue Until";
+            if (ReferenceEquals(flow.EventSlot, evt))
+            {
+                SelectedBlock = evt;
+                return;
+            }
+
+            // Detach from wherever it currently lives.
+            if (BlockTree.TryLocate(Blocks, evt, out var location))
+            {
+                DetachBlock(location);
+            }
+
+            EjectEventSlot(flow);
+            flow.EventSlot = evt;
+            TrackBlock(evt);
+            SelectedBlock = evt;
+            Status = $"Placed '{evt.Name}' in Continue Until event slot";
         });
     }
 
+    public void AssignEventToContinueUntil(ContinueUntilBlock flow, EventBlock? evt)
+        => PlaceEventInSlot(flow, evt);
+
     /// <summary>
-    /// Creates a Press Key event from the palette and assigns it to a Continue Until block.
+    /// Creates a Press Key event from the palette and places it in the flow's event slot.
     /// </summary>
     public void DropPaletteKeyPressEventOnto(ContinueUntilBlock flow)
     {
@@ -993,20 +1006,60 @@ public sealed class MainViewModel : ViewModelBase
         Mutate(() =>
         {
             var evt = new KeyPressEventBlock();
-            if (BlockTree.TryFindOwner(Blocks, flow, out var owner, out var index))
-            {
-                owner.Insert(index, evt);
-            }
-            else
-            {
-                Blocks.Add(evt);
-            }
-
-            flow.EventBlockId = evt.Id;
-            flow.EventLabel = evt.Name;
-            SelectedBlock = flow;
-            Status = $"Created and assigned '{evt.Name}' to Continue Until";
+            EjectEventSlot(flow);
+            flow.EventSlot = evt;
+            TrackBlock(evt);
+            SelectedBlock = evt;
+            Status = $"Created '{evt.Name}' in Continue Until event slot";
         });
+    }
+
+    private void EjectEventSlot(ContinueUntilBlock flow)
+    {
+        if (flow.EventSlot is null)
+        {
+            return;
+        }
+
+        var previous = flow.EventSlot;
+        flow.EventSlot = null;
+
+        if (BlockTree.TryFindOwner(Blocks, flow, out var owner, out var index))
+        {
+            owner.Insert(index, previous);
+        }
+        else
+        {
+            Blocks.Add(previous);
+        }
+
+        TrackBlock(previous);
+    }
+
+    private static void DetachBlock(BlockLocation location)
+    {
+        switch (location)
+        {
+            case CollectionLocation col:
+                col.Owner.RemoveAt(col.Index);
+                break;
+            case EventSlotLocation slot:
+                slot.Flow.EventSlot = null;
+                break;
+        }
+    }
+
+    private bool IsEventBodyCollection(ObservableCollection<MacroBlock> owner)
+    {
+        foreach (var flow in BlockTree.Enumerate(Blocks).OfType<ContinueUntilBlock>())
+        {
+            if (ReferenceEquals(flow.Children, owner))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void SelectRunSubscript(MacroScript? script)

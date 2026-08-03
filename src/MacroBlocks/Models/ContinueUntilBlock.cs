@@ -4,24 +4,66 @@ using System.Text.Json.Serialization;
 namespace MacroBlocks.Models;
 
 /// <summary>
-/// Loops nested body blocks until the referenced event flag is raised.
+/// Loops nested body blocks until the slotted event flag is raised.
 /// </summary>
 public sealed class ContinueUntilBlock : MacroBlock
 {
-    private Guid? _eventBlockId;
+    private EventBlock? _eventSlot;
     private string _eventLabel = "(no event)";
+    private Guid? _legacyEventBlockId;
 
-    public Guid? EventBlockId
+    /// <summary>
+    /// Event owned by this flow's event slot (not part of the body).
+    /// </summary>
+    [JsonIgnore]
+    public EventBlock? EventSlot
     {
-        get => _eventBlockId;
+        get => _eventSlot;
         set
         {
-            if (SetField(ref _eventBlockId, value))
+            if (ReferenceEquals(_eventSlot, value))
             {
-                OnPropertyChanged(nameof(Summary));
+                return;
             }
+
+            _eventSlot = value;
+            EventLabel = value?.Name ?? "(no event)";
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasEventSlot));
+            OnPropertyChanged(nameof(EventBlockId));
+            OnPropertyChanged(nameof(Summary));
         }
     }
+
+    [JsonIgnore]
+    public bool HasEventSlot => EventSlot is not null;
+
+    [JsonPropertyName("eventSlot")]
+    public EventBlock? EventSlotForStorage
+    {
+        get => EventSlot;
+        set => EventSlot = value;
+    }
+
+    /// <summary>
+    /// Id of the slotted event, used by playback.
+    /// </summary>
+    [JsonIgnore]
+    public Guid? EventBlockId => EventSlot?.Id;
+
+    /// <summary>
+    /// Legacy scripts stored a Guid reference to an event elsewhere in the tree.
+    /// </summary>
+    [JsonPropertyName("eventBlockId")]
+    public Guid? EventBlockIdForStorage
+    {
+        get => null;
+        set => _legacyEventBlockId = value;
+    }
+
+    internal Guid? LegacyEventBlockId => _legacyEventBlockId;
+
+    internal void ClearLegacyEventBlockId() => _legacyEventBlockId = null;
 
     public string EventLabel
     {
@@ -65,9 +107,15 @@ public sealed class ContinueUntilBlock : MacroBlock
     {
         var copy = new ContinueUntilBlock
         {
-            EventBlockId = EventBlockId,
             EventLabel = EventLabel
         };
+
+        if (EventSlot is not null)
+        {
+            var slotted = EventSlot.Clone();
+            slotted.Id = EventSlot.Id;
+            copy.EventSlot = (EventBlock)slotted;
+        }
 
         foreach (var child in Children)
         {

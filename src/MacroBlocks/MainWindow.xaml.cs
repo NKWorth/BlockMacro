@@ -212,15 +212,59 @@ public partial class MainWindow : Window
         _paletteDragSource = null;
     }
 
+    private void FlowHeader_DragOver(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        // Header is for reordering the flow in its parent — not for event assignment.
+        HandleDragOver(e, null, null, isFlowBody: false, flow: flow, isEventSlot: false);
+    }
+
+    private void FlowHeader_Drop(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDrop(e, null, isFlowBody: false, flow: flow, isEventSlot: false);
+    }
+
+    private void FlowEventSlot_DragOver(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDragOver(e, null, null, isFlowBody: false, flow: flow, isEventSlot: true);
+    }
+
+    private void FlowEventSlot_Drop(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDrop(e, null, isFlowBody: false, flow: flow, isEventSlot: true);
+    }
+
+    private void FlowBody_DragOver(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        var list = FindItemsControl(e.OriginalSource as DependencyObject)
+                   ?? FindItemsControl(sender as DependencyObject);
+        HandleDragOver(e, flow?.Children, list, isFlowBody: true, flow: flow, isEventSlot: false);
+    }
+
+    private void FlowBody_Drop(object sender, DragEventArgs e)
+    {
+        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
+                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
+        HandleDrop(e, flow?.Children, isFlowBody: true, flow: flow, isEventSlot: false);
+    }
+
     private void ScriptRoot_DragOver(object sender, DragEventArgs e)
-        => HandleDragOver(e, Vm?.Blocks, ScriptList, isFlowBody: false, flow: null);
+        => HandleDragOver(e, Vm?.Blocks, ScriptList, isFlowBody: false, flow: null, isEventSlot: false);
 
     private void ScriptRoot_Drop(object sender, DragEventArgs e)
-        => HandleDrop(e, Vm?.Blocks, isFlowBody: false, flow: null);
+        => HandleDrop(e, Vm?.Blocks, isFlowBody: false, flow: null, isEventSlot: false);
 
     private void ScriptRoot_DragLeave(object sender, DragEventArgs e)
     {
-        // Only clear when truly leaving the script surface.
         if (sender is FrameworkElement fe)
         {
             var pos = e.GetPosition(fe);
@@ -231,42 +275,13 @@ public partial class MainWindow : Window
         }
     }
 
-    private void FlowHeader_DragOver(object sender, DragEventArgs e)
-    {
-        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
-                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
-        HandleDragOver(e, null, null, isFlowBody: false, flow: flow);
-    }
-
-    private void FlowHeader_Drop(object sender, DragEventArgs e)
-    {
-        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
-                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
-        HandleDrop(e, null, isFlowBody: false, flow: flow);
-    }
-
-    private void FlowBody_DragOver(object sender, DragEventArgs e)
-    {
-        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
-                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
-        var list = FindItemsControl(e.OriginalSource as DependencyObject)
-                   ?? FindItemsControl(sender as DependencyObject);
-        HandleDragOver(e, flow?.Children, list, isFlowBody: true, flow: flow);
-    }
-
-    private void FlowBody_Drop(object sender, DragEventArgs e)
-    {
-        var flow = (sender as FrameworkElement)?.DataContext as ContinueUntilBlock
-                   ?? FindDataContext<ContinueUntilBlock>(e.OriginalSource as DependencyObject);
-        HandleDrop(e, flow?.Children, isFlowBody: true, flow: flow);
-    }
-
     private void HandleDragOver(
         DragEventArgs e,
         ObservableCollection<MacroBlock>? targetOwner,
         ItemsControl? list,
         bool isFlowBody,
-        ContinueUntilBlock? flow)
+        ContinueUntilBlock? flow,
+        bool isEventSlot)
     {
         e.Effects = DragDropEffects.None;
         _ghost.UpdatePosition();
@@ -281,12 +296,28 @@ public partial class MainWindow : Window
         var hasScript = e.Data.GetDataPresent(DragFormats.ScriptBlock)
                         && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock;
 
-        // Assign event onto Continue Until header.
-        if (!isFlowBody && flow is not null)
+        if (isEventSlot && flow is not null)
         {
             if (hasPalette && e.Data.GetData(DragFormats.PaletteBlockKind) is string kind && kind == "KeyPressEvent")
             {
                 e.Effects = DragDropEffects.Copy;
+            }
+            else if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
+            {
+                e.Effects = DragDropEffects.Move;
+            }
+
+            _gaps.Clear();
+            e.Handled = true;
+            return;
+        }
+
+        // Body rejects events — they belong in the event slot.
+        if (isFlowBody)
+        {
+            if (hasPalette && e.Data.GetData(DragFormats.PaletteBlockKind) is string bodyKind && bodyKind == "KeyPressEvent")
+            {
+                e.Effects = DragDropEffects.None;
                 _gaps.Clear();
                 e.Handled = true;
                 return;
@@ -294,7 +325,7 @@ public partial class MainWindow : Window
 
             if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
             {
-                e.Effects = DragDropEffects.Link;
+                e.Effects = DragDropEffects.None;
                 _gaps.Clear();
                 e.Handled = true;
                 return;
@@ -312,6 +343,17 @@ public partial class MainWindow : Window
                 if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock src
                     && src is ContinueUntilBlock mf
                     && (ReferenceEquals(src, flow) || BlockTree.ContainsBlock(mf, flow)))
+                {
+                    e.Effects = DragDropEffects.None;
+                    _gaps.Clear();
+                }
+                else if (hasPalette && e.Data.GetData(DragFormats.PaletteBlockKind) is string pk && pk == "KeyPressEvent")
+                {
+                    // Events go to the event slot, not beside the flow via header.
+                    e.Effects = DragDropEffects.None;
+                    _gaps.Clear();
+                }
+                else if (hasScript && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
                 {
                     e.Effects = DragDropEffects.None;
                     _gaps.Clear();
@@ -354,7 +396,8 @@ public partial class MainWindow : Window
         DragEventArgs e,
         ObservableCollection<MacroBlock>? targetOwner,
         bool isFlowBody,
-        ContinueUntilBlock? flow)
+        ContinueUntilBlock? flow,
+        bool isEventSlot)
     {
         if (Vm is null || !CanDragEdit())
         {
@@ -363,8 +406,7 @@ public partial class MainWindow : Window
 
         try
         {
-            // Palette / existing event onto Continue Until header → assign.
-            if (!isFlowBody && flow is not null)
+            if (isEventSlot && flow is not null)
             {
                 if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
                     && e.Data.GetData(DragFormats.PaletteBlockKind) is string kind
@@ -378,12 +420,36 @@ public partial class MainWindow : Window
                 if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
                     && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock eventBlock)
                 {
-                    Vm.AssignEventToContinueUntil(flow, eventBlock);
+                    Vm.PlaceEventInSlot(flow, eventBlock);
                     e.Handled = true;
                     return;
                 }
 
-                // Other palette/script drops on header → insert around the flow in its parent.
+                e.Handled = true;
+                return;
+            }
+
+            if (isFlowBody)
+            {
+                if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
+                    && e.Data.GetData(DragFormats.PaletteBlockKind) is string rejectKind
+                    && rejectKind == "KeyPressEvent")
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
+                    && e.Data.GetData(DragFormats.ScriptBlock) is EventBlock)
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            // Other drops on header → insert around the flow in its parent.
+            if (!isFlowBody && flow is not null && targetOwner is null)
+            {
                 if (BlockTree.TryFindOwner(Vm.Blocks, flow, out var parentOwner, out _))
                 {
                     var parentList = FindItemsControlForOwner(parentOwner) ?? ScriptList;
@@ -392,7 +458,8 @@ public partial class MainWindow : Window
                         : parentOwner.IndexOf(flow);
 
                     if (e.Data.GetDataPresent(DragFormats.PaletteBlockKind)
-                        && e.Data.GetData(DragFormats.PaletteBlockKind) is string paletteKind)
+                        && e.Data.GetData(DragFormats.PaletteBlockKind) is string paletteKind
+                        && paletteKind != "KeyPressEvent")
                     {
                         Vm.InsertPaletteBlock(paletteKind, parentOwner, insertIndex);
                         e.Handled = true;
@@ -401,6 +468,7 @@ public partial class MainWindow : Window
 
                     if (e.Data.GetDataPresent(DragFormats.ScriptBlock)
                         && e.Data.GetData(DragFormats.ScriptBlock) is MacroBlock source
+                        && source is not EventBlock
                         && !ReferenceEquals(source, flow))
                     {
                         Vm.MoveBlockInto(source, parentOwner, insertIndex);
@@ -408,6 +476,9 @@ public partial class MainWindow : Window
                         return;
                     }
                 }
+
+                e.Handled = true;
+                return;
             }
 
             if (targetOwner is null)

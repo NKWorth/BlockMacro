@@ -112,7 +112,7 @@
                     PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
                 <DockPanel>
                     <Border DockPanel.Dock="Top"
-                            Padding="10,8"
+                            Padding="10,8,10,4"
                             Cursor="SizeAll"
                             Background="Transparent"
                             AllowDrop="True"
@@ -126,11 +126,61 @@
                                        Foreground="#3B82F6"
                                        FontSize="12"
                                        Margin="0,2,0,0" />
-                            <TextBlock Text="Drop an event here to assign · body below"
-                                       Foreground="#93C5FD"
-                                       FontSize="10"
-                                       Margin="0,4,0,0" />
                         </StackPanel>
+                    </Border>
+
+                    <!-- Event slot: accepts only Event blocks -->
+                    <Border DockPanel.Dock="Top"
+                            Tag="EventSlot"
+                            Margin="14,2,8,6"
+                            Padding="6"
+                            MinHeight="44"
+                            Background="#FFFBEB"
+                            BorderBrush="#FCD34D"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            AllowDrop="True"
+                            DragOver="FlowEventSlot_DragOver"
+                            Drop="FlowEventSlot_Drop">
+                        <Grid>
+                            <TextBlock Text="Drop event here"
+                                       Foreground="#D97706"
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Visibility="{Binding EventSlot, Converter={x:Static vm:NullToVisibilityConverter.WhenNull}}" />
+
+                            <Border Visibility="{Binding EventSlot, Converter={x:Static vm:NullToVisibilityConverter.Instance}}">
+                                <Border BorderBrush="#F59E0B"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="8,6"
+                                        Cursor="SizeAll"
+                                        DataContext="{Binding EventSlot}"
+                                        PreviewMouseLeftButtonDown="BlockItem_PreviewMouseLeftButtonDown"
+                                        PreviewMouseMove="BlockItem_PreviewMouseMove"
+                                        PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
+                                    <Border.Background>
+                                        <MultiBinding Converter="{x:Static local:SelectedBlockBackgroundConverter.Instance}">
+                                            <Binding />
+                                            <Binding Path="DataContext.SelectedBlock"
+                                                     RelativeSource="{RelativeSource AncestorType=Window}" />
+                                        </MultiBinding>
+                                    </Border.Background>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#92400E"
+                                                   FontSize="12" />
+                                        <TextBlock Text="{Binding Summary}"
+                                                   Foreground="#B45309"
+                                                   FontSize="11"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </Border>
+                        </Grid>
                     </Border>
 
                     <Border Margin="14,0,8,8"
@@ -510,7 +560,7 @@
                                        Foreground="#6B7280"
                                        FontSize="11"
                                        LineHeight="16"
-                                       Text="Body blocks nest inside this flow. Drag blocks into or out of the indented area. Drop an event on the header to assign it." />
+                                       Text="The amber slot accepts only events. Drag an event in or out of the slot; body blocks nest below." />
                         </StackPanel>
 
                         <!-- Run Subscript editor -->

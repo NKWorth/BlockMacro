@@ -196,9 +196,9 @@ public sealed class MacroPlaybackEngine
         Stack<Guid> callStack,
         CancellationToken token)
     {
-        if (continueUntil.EventBlockId is not { } eventId)
+        if (continueUntil.EventSlot is null || continueUntil.EventBlockId is not { } eventId)
         {
-            throw new InvalidOperationException("Continue Until has no event selected.");
+            throw new InvalidOperationException("Continue Until has no event in its event slot.");
         }
 
         runtime.Reset(eventId);
