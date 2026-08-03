@@ -25,7 +25,9 @@ public sealed class MainViewModel : ViewModelBase
     private bool _isRecordingLocation;
     private WindowState _windowStateBeforeRecord = WindowState.Normal;
     private string _keyPressEventKeyText = "F";
+    private string _keyPressKeyText = "A";
     private string _scriptName = "Untitled Macro";
+    private string? _selectedPaletteKind;
 
     public MainViewModel()
         : this(new JsonScriptLibrary())
@@ -77,14 +79,13 @@ public sealed class MainViewModel : ViewModelBase
             Application.Current.Dispatcher.Invoke(() => Status = message);
         };
 
-        AddDelayCommand = new RelayCommand(AddDelay, CanEditScript);
-        AddMouseClickCommand = new RelayCommand(AddMouseClick, CanEditScript);
-        AddMouseMoveCommand = new RelayCommand(AddMouseMove, CanEditScript);
-        AddKeyPressCommand = new RelayCommand(AddKeyPress, CanEditScript);
-        AddKeyPressEventCommand = new RelayCommand(AddKeyPressEvent, CanEditScript);
-        AddContinueUntilCommand = new RelayCommand(AddContinueUntil, CanEditScript);
-        AddRunSubscriptCommand = new RelayCommand(AddRunSubscript, CanEditScript);
-        RemoveSelectedCommand = new RelayCommand(RemoveSelected, () => CanEditScript() && SelectedBlock is not null);
+        SelectPaletteCommand = new RelayCommand(
+            p => SelectPaletteKind(p as string),
+            _ => CanEditScript());
+        InsertPaletteDraftCommand = new RelayCommand(InsertPaletteDraft, () => CanEditScript() && IsPaletteDraft);
+        RemoveSelectedCommand = new RelayCommand(
+            RemoveSelected,
+            () => CanEditScript() && SelectedBlock is not null && BlockTree.TryLocate(Blocks, SelectedBlock, out _));
         MoveUpCommand = new RelayCommand(MoveUp, () => CanEditScript() && CanMoveSelected(-1));
         MoveDownCommand = new RelayCommand(MoveDown, () => CanEditScript() && CanMoveSelected(1));
         ClearCommand = new RelayCommand(Clear, () => CanEditScript() && Blocks.Count > 0);
@@ -141,6 +142,11 @@ public sealed class MainViewModel : ViewModelBase
 
             if (SetProperty(ref _selectedBlock, value))
             {
+                if (value is not null && BlockTree.TryLocate(Blocks, value, out _))
+                {
+                    SelectedPaletteKind = null;
+                }
+
                 if (_selectedBlock is INotifyPropertyChanged newNpc)
                 {
                     newNpc.PropertyChanged += OnSelectedBlockPropertyChanged;
@@ -150,6 +156,12 @@ public sealed class MainViewModel : ViewModelBase
                 {
                     _keyPressEventKeyText = keyEvent.KeyLabel;
                     OnPropertyChanged(nameof(KeyPressEventKeyText));
+                }
+
+                if (_selectedBlock is KeyPressBlock keyPress)
+                {
+                    _keyPressKeyText = keyPress.KeyLabel;
+                    OnPropertyChanged(nameof(KeyPressKeyText));
                 }
 
                 NotifySelectionProperties();
@@ -178,6 +190,15 @@ public sealed class MainViewModel : ViewModelBase
     public MouseMoveBlock? SelectedMouseMove => SelectedBlock as MouseMoveBlock;
     public bool HasMouseMoveSelection => SelectedMouseMove is not null;
 
+    public MouseClickBlock? SelectedMouseClick => SelectedBlock as MouseClickBlock;
+    public bool HasMouseClickSelection => SelectedMouseClick is not null;
+
+    public DelayBlock? SelectedDelay => SelectedBlock as DelayBlock;
+    public bool HasDelaySelection => SelectedDelay is not null;
+
+    public KeyPressBlock? SelectedKeyPress => SelectedBlock as KeyPressBlock;
+    public bool HasKeyPressSelection => SelectedKeyPress is not null;
+
     public KeyPressEventBlock? SelectedKeyPressEvent => SelectedBlock as KeyPressEventBlock;
     public bool HasKeyPressEventSelection => SelectedKeyPressEvent is not null;
 
@@ -186,6 +207,29 @@ public sealed class MainViewModel : ViewModelBase
 
     public RunSubscriptBlock? SelectedRunSubscript => SelectedBlock as RunSubscriptBlock;
     public bool HasRunSubscriptSelection => SelectedRunSubscript is not null;
+
+    public string? SelectedPaletteKind
+    {
+        get => _selectedPaletteKind;
+        private set
+        {
+            if (SetProperty(ref _selectedPaletteKind, value))
+            {
+                OnPropertyChanged(nameof(IsPaletteDraft));
+                RefreshCommands();
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the inspector is editing a palette draft that is not yet in the script.
+    /// </summary>
+    public bool IsPaletteDraft =>
+        SelectedPaletteKind is not null
+        && SelectedBlock is not null
+        && !BlockTree.TryLocate(Blocks, SelectedBlock, out _);
+
+    public Array MouseButtonOptions { get; } = Enum.GetValues(typeof(Models.MouseButton));
 
     public Guid? SelectedContinueUntilEventId
     {
@@ -243,6 +287,22 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    public string KeyPressKeyText
+    {
+        get => _keyPressKeyText;
+        set
+        {
+            if (!SetProperty(ref _keyPressKeyText, value) || SelectedKeyPress is null)
+            {
+                return;
+            }
+
+            var label = string.IsNullOrWhiteSpace(value) ? "?" : value.Trim().ToUpperInvariant();
+            SelectedKeyPress.KeyLabel = label;
+            SelectedKeyPress.VirtualKey = ResolveVirtualKey(label);
+        }
+    }
+
     public string Status
     {
         get => _status;
@@ -285,13 +345,8 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
-    public ICommand AddDelayCommand { get; }
-    public ICommand AddMouseClickCommand { get; }
-    public ICommand AddMouseMoveCommand { get; }
-    public ICommand AddKeyPressCommand { get; }
-    public ICommand AddKeyPressEventCommand { get; }
-    public ICommand AddContinueUntilCommand { get; }
-    public ICommand AddRunSubscriptCommand { get; }
+    public ICommand SelectPaletteCommand { get; }
+    public ICommand InsertPaletteDraftCommand { get; }
     public ICommand RemoveSelectedCommand { get; }
     public ICommand MoveUpCommand { get; }
     public ICommand MoveDownCommand { get; }
@@ -313,6 +368,12 @@ public sealed class MainViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(SelectedMouseMove));
         OnPropertyChanged(nameof(HasMouseMoveSelection));
+        OnPropertyChanged(nameof(SelectedMouseClick));
+        OnPropertyChanged(nameof(HasMouseClickSelection));
+        OnPropertyChanged(nameof(SelectedDelay));
+        OnPropertyChanged(nameof(HasDelaySelection));
+        OnPropertyChanged(nameof(SelectedKeyPress));
+        OnPropertyChanged(nameof(HasKeyPressSelection));
         OnPropertyChanged(nameof(SelectedKeyPressEvent));
         OnPropertyChanged(nameof(HasKeyPressEventSelection));
         OnPropertyChanged(nameof(SelectedContinueUntil));
@@ -321,6 +382,7 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedRunSubscript));
         OnPropertyChanged(nameof(HasRunSubscriptSelection));
         OnPropertyChanged(nameof(SelectedRunSubscriptId));
+        OnPropertyChanged(nameof(IsPaletteDraft));
     }
 
     private void Mutate(Action action)
@@ -331,66 +393,84 @@ public sealed class MainViewModel : ViewModelBase
         RefreshCommands();
     }
 
-    private void AddDelay() => Mutate(() =>
+    public void SelectPaletteKind(string? kind)
     {
-        var block = new DelayBlock { Milliseconds = 500 };
-        Blocks.Add(block);
-        SelectedBlock = block;
-    });
-
-    private void AddMouseClick() => Mutate(() =>
-    {
-        var block = new MouseClickBlock { X = 100, Y = 100, Button = Models.MouseButton.Left };
-        Blocks.Add(block);
-        SelectedBlock = block;
-    });
-
-    private void AddMouseMove() => Mutate(() =>
-    {
-        var block = new MouseMoveBlock { X = 200, Y = 200 };
-        Blocks.Add(block);
-        SelectedBlock = block;
-    });
-
-    private void AddKeyPress() => Mutate(() =>
-    {
-        var block = new KeyPressBlock
+        if (!CanEditScript() || string.IsNullOrWhiteSpace(kind))
         {
-            VirtualKey = 0x41,
-            KeyLabel = "A"
-        };
-        Blocks.Add(block);
-        SelectedBlock = block;
-    });
-
-    private void AddKeyPressEvent() => Mutate(() =>
-    {
-        var block = new KeyPressEventBlock();
-        Blocks.Add(block);
-        SelectedBlock = block;
-    });
-
-    private void AddContinueUntil() => Mutate(() =>
-    {
-        var block = new ContinueUntilBlock();
-        Blocks.Add(block);
-        EnsureTreeSubscriptions(block.Children);
-        SelectedBlock = block;
-    });
-
-    private void AddRunSubscript() => Mutate(() =>
-    {
-        var block = new RunSubscriptBlock();
-        var candidates = LibraryScripts.Where(s => s.Id != _script.Id).ToList();
-        if (candidates.Count > 0)
-        {
-            block.ScriptId = candidates[0].Id;
-            block.ScriptName = candidates[0].Name;
+            return;
         }
 
-        Blocks.Add(block);
-        SelectedBlock = block;
-    });
+        if (SelectedPaletteKind == kind && IsPaletteDraft)
+        {
+            Status = $"Configure {SelectedBlock!.DisplayName}, then Insert or drag into the script";
+            return;
+        }
+
+        var draft = CreateConfiguredPaletteBlock(kind);
+        if (draft is null)
+        {
+            return;
+        }
+
+        SelectedPaletteKind = kind;
+        SelectedBlock = draft;
+        Status = $"Configure {draft.DisplayName}, then Insert or drag into the script";
+    }
+
+    private void InsertPaletteDraft()
+    {
+        if (!CanEditScript() || !IsPaletteDraft || SelectedBlock is null || SelectedPaletteKind is null)
+        {
+            return;
+        }
+
+        var clone = CloneForInsert(SelectedBlock);
+        Mutate(() =>
+        {
+            Blocks.Add(clone);
+            if (clone is ContinueUntilBlock flow)
+            {
+                EnsureTreeSubscriptions(flow.Children);
+                if (flow.EventSlot is not null)
+                {
+                    TrackBlock(flow.EventSlot);
+                }
+            }
+
+            SelectedPaletteKind = null;
+            SelectedBlock = clone;
+            Status = $"Inserted {clone.DisplayName}";
+        });
+    }
+
+    private MacroBlock? CreateConfiguredPaletteBlock(string kind)
+    {
+        var block = CreatePaletteBlock(kind);
+        if (block is RunSubscriptBlock run)
+        {
+            var candidates = LibraryScripts.Where(s => s.Id != _script.Id).ToList();
+            if (candidates.Count > 0)
+            {
+                run.ScriptId = candidates[0].Id;
+                run.ScriptName = candidates[0].Name;
+            }
+        }
+
+        return block;
+    }
+
+    private static MacroBlock CloneForInsert(MacroBlock source)
+    {
+        var clone = source.Clone();
+        // Fresh identity for the script copy; keep nested child ids from Clone when present.
+        clone.Id = Guid.NewGuid();
+        if (clone is ContinueUntilBlock flow && flow.EventSlot is not null)
+        {
+            flow.EventSlot.Id = Guid.NewGuid();
+        }
+
+        return clone;
+    }
 
     private void RemoveSelected()
     {
@@ -579,6 +659,7 @@ public sealed class MainViewModel : ViewModelBase
 
         _scriptName = _script.Name;
         _loopForever = _script.LoopForever;
+        SelectedPaletteKind = null;
         SelectedBlock = null;
 
         OnPropertyChanged(nameof(Script));
@@ -674,10 +755,20 @@ public sealed class MainViewModel : ViewModelBase
             var point = await _pointPicker.PickNextClickAsync();
             if (point is { } captured && ReferenceEquals(SelectedMouseMove, target))
             {
-                _history.CheckpointBeforeChange(_script);
+                var inScript = BlockTree.TryLocate(Blocks, target, out _);
+                if (inScript)
+                {
+                    _history.CheckpointBeforeChange(_script);
+                }
+
                 target.X = captured.X;
                 target.Y = captured.Y;
-                _history.CaptureBaseline(_script);
+
+                if (inScript)
+                {
+                    _history.CaptureBaseline(_script);
+                }
+
                 Status = $"Location set to ({captured.X}, {captured.Y})";
             }
             else if (point is null)
@@ -905,7 +996,9 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        var block = CreatePaletteBlock(kind);
+        var block = IsPaletteDraft && SelectedPaletteKind == kind && SelectedBlock is not null
+            ? CloneForInsert(SelectedBlock)
+            : CreateConfiguredPaletteBlock(kind);
         if (block is null)
         {
             return;
@@ -918,6 +1011,10 @@ public sealed class MainViewModel : ViewModelBase
             if (block is ContinueUntilBlock flow)
             {
                 EnsureTreeSubscriptions(flow.Children);
+                if (flow.EventSlot is not null)
+                {
+                    TrackBlock(flow.EventSlot);
+                }
             }
 
             SelectedBlock = block;
@@ -1005,7 +1102,9 @@ public sealed class MainViewModel : ViewModelBase
 
         Mutate(() =>
         {
-            var evt = new KeyPressEventBlock();
+            var evt = IsPaletteDraft && SelectedBlock is KeyPressEventBlock draft
+                ? (KeyPressEventBlock)CloneForInsert(draft)
+                : new KeyPressEventBlock();
             EjectEventSlot(flow);
             flow.EventSlot = evt;
             TrackBlock(evt);
@@ -1120,13 +1219,8 @@ public sealed class MainViewModel : ViewModelBase
 
     private void RefreshCommands()
     {
-        (AddDelayCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (AddMouseClickCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (AddMouseMoveCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (AddKeyPressCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (AddKeyPressEventCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (AddContinueUntilCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (AddRunSubscriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (SelectPaletteCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (InsertPaletteDraftCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (RemoveSelectedCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (MoveUpCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (MoveDownCommand as RelayCommand)?.RaiseCanExecuteChanged();

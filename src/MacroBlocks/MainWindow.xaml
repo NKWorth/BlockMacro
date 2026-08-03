@@ -286,8 +286,15 @@
             <Border Grid.Column="0" Style="{StaticResource PanelCard}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="Add Block"
+                        <TextBlock Text="Blocks"
                                    Style="{StaticResource SectionTitle}" />
+
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="#6B7280"
+                                   FontSize="11"
+                                   LineHeight="15"
+                                   Margin="0,0,0,10"
+                                   Text="Click to configure, then Insert or drag into the script." />
 
                         <TextBlock Text="Actions"
                                    FontSize="11"
@@ -297,32 +304,28 @@
                         <Button Content="Delay"
                                 Style="{StaticResource ToolButton}"
                                 Tag="Delay"
-                                ToolTip="Click to add, or drag into the script"
-                                Command="{Binding AddDelayCommand}"
+                                ToolTip="Click to configure, then Insert or drag into the script"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Mouse Move"
                                 Style="{StaticResource ToolButton}"
                                 Tag="MouseMove"
-                                ToolTip="Click to add, or drag into the script"
-                                Command="{Binding AddMouseMoveCommand}"
+                                ToolTip="Click to configure, then Insert or drag into the script"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Mouse Click"
                                 Style="{StaticResource ToolButton}"
                                 Tag="MouseClick"
-                                ToolTip="Click to add, or drag into the script"
-                                Command="{Binding AddMouseClickCommand}"
+                                ToolTip="Click to configure, then Insert or drag into the script"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Key Press"
                                 Style="{StaticResource ToolButton}"
                                 Tag="KeyPress"
-                                ToolTip="Click to add, or drag into the script"
-                                Command="{Binding AddKeyPressCommand}"
+                                ToolTip="Click to configure, then Insert or drag into the script"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
@@ -335,16 +338,14 @@
                         <Button Content="Continue Until"
                                 Style="{StaticResource ToolButton}"
                                 Tag="ContinueUntil"
-                                ToolTip="Click to add, or drag into the script"
-                                Command="{Binding AddContinueUntilCommand}"
+                                ToolTip="Click to configure, then Insert or drag into the script"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
                         <Button Content="Run Subscript"
                                 Style="{StaticResource ToolButton}"
                                 Tag="RunSubscript"
-                                ToolTip="Click to add, or drag into the script"
-                                Command="{Binding AddRunSubscriptCommand}"
+                                ToolTip="Click to configure, then Insert or drag into the script"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
@@ -357,8 +358,7 @@
                         <Button Content="Event: Press Key"
                                 Style="{StaticResource ToolButton}"
                                 Tag="KeyPressEvent"
-                                ToolTip="Click to add, drag into the script, or drop on Continue Until to assign"
-                                Command="{Binding AddKeyPressEventCommand}"
+                                ToolTip="Click to configure, then Insert, drag into the script, or drop on a Continue Until event slot"
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
@@ -470,8 +470,40 @@
                                    FontSize="12"
                                    LineHeight="18"
                                    Visibility="{Binding SelectedBlock, Converter={x:Static vm:NullToVisibilityConverter.WhenNull}}">
-                            Select a block to edit its properties.
+                            Select a script block to edit, or a palette block to configure before inserting.
                         </TextBlock>
+
+                        <!-- Palette draft banner -->
+                        <StackPanel Margin="0,0,0,14"
+                                    Visibility="{Binding IsPaletteDraft, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="New block"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#B45309"
+                                       Margin="0,0,0,8" />
+                            <Button Content="Insert into script"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Command="{Binding InsertPaletteDraftCommand}"
+                                    Margin="0,0,0,4" />
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="15"
+                                       Text="Or drag from the palette into the script. Configured values are kept." />
+                        </StackPanel>
+
+                        <!-- Delay editor -->
+                        <StackPanel Visibility="{Binding HasDelaySelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedDelay.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Milliseconds" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedDelay.Milliseconds, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+                        </StackPanel>
 
                         <!-- Mouse Move editor -->
                         <StackPanel Visibility="{Binding HasMouseMoveSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
@@ -517,6 +549,58 @@
                                        Text="Duration 0 jumps instantly. Any positive value lerps from the current cursor position to the target over that many milliseconds." />
                         </StackPanel>
 
+                        <!-- Mouse Click editor -->
+                        <StackPanel Visibility="{Binding HasMouseClickSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedMouseClick.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="X" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseClick.X, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+
+                            <TextBlock Text="Y" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseClick.Y, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+
+                            <TextBlock Text="Button" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding MouseButtonOptions}"
+                                      SelectedItem="{Binding SelectedMouseClick.Button}"
+                                      Margin="0,0,0,10"
+                                      Padding="4" />
+
+                            <TextBlock Text="Click count" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding SelectedMouseClick.ClickCount, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+                        </StackPanel>
+
+                        <!-- Key Press editor -->
+                        <StackPanel Visibility="{Binding HasKeyPressSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedKeyPress.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Key" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBox Text="{Binding KeyPressKeyText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,0,0,10"
+                                     Padding="6,4" />
+
+                            <CheckBox Content="Ctrl"
+                                      IsChecked="{Binding SelectedKeyPress.Ctrl}"
+                                      Margin="0,0,0,6" />
+                            <CheckBox Content="Alt"
+                                      IsChecked="{Binding SelectedKeyPress.Alt}"
+                                      Margin="0,0,0,6" />
+                            <CheckBox Content="Shift"
+                                      IsChecked="{Binding SelectedKeyPress.Shift}"
+                                      Margin="0,0,0,10" />
+                        </StackPanel>
+
                         <!-- Press Key event editor -->
                         <StackPanel Visibility="{Binding HasKeyPressEventSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedKeyPressEvent.DisplayName}"
@@ -548,13 +632,15 @@
                                        Foreground="#111827"
                                        Margin="0,0,0,12" />
 
-                            <TextBlock Text="Until event" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
-                            <ComboBox ItemsSource="{Binding AvailableEvents}"
-                                      DisplayMemberPath="Name"
-                                      SelectedValuePath="Id"
-                                      SelectedValue="{Binding SelectedContinueUntilEventId, UpdateSourceTrigger=PropertyChanged}"
-                                      Margin="0,0,0,10"
-                                      Padding="4" />
+                            <StackPanel Visibility="{Binding IsPaletteDraft, Converter={x:Static vm:BoolToVisibilityConverter.Inverted}}">
+                                <TextBlock Text="Until event" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                                <ComboBox ItemsSource="{Binding AvailableEvents}"
+                                          DisplayMemberPath="Name"
+                                          SelectedValuePath="Id"
+                                          SelectedValue="{Binding SelectedContinueUntilEventId, UpdateSourceTrigger=PropertyChanged}"
+                                          Margin="0,0,0,10"
+                                          Padding="4" />
+                            </StackPanel>
 
                             <TextBlock TextWrapping="Wrap"
                                        Foreground="#6B7280"

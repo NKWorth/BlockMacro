@@ -135,6 +135,12 @@ public partial class MainWindow : Window
 
     private void PaletteBlock_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        var kind = (sender as FrameworkElement)?.Tag as string;
+        if (kind is not null)
+        {
+            Vm?.SelectPaletteKind(kind);
+        }
+
         if (!CanDragEdit())
         {
             return;
@@ -142,7 +148,7 @@ public partial class MainWindow : Window
 
         _paletteDragStart = e.GetPosition(null);
         _paletteDragPending = true;
-        _paletteDragKind = (sender as FrameworkElement)?.Tag as string;
+        _paletteDragKind = kind;
         _paletteDragSource = sender as FrameworkElement;
     }
 
@@ -158,13 +164,19 @@ public partial class MainWindow : Window
         }
 
         _paletteDragPending = false;
-        var (title, subtitle) = MainViewModel.DescribePaletteKind(_paletteDragKind);
+        var title = Vm?.SelectedBlock?.DisplayName;
+        var subtitle = Vm?.SelectedBlock?.Summary;
+        if (title is null || Vm?.SelectedPaletteKind != _paletteDragKind)
+        {
+            (title, subtitle) = MainViewModel.DescribePaletteKind(_paletteDragKind);
+        }
+
         BeginDrag(
             element,
             new DataObject(DragFormats.PaletteBlockKind, _paletteDragKind),
             DragDropEffects.Copy,
             title,
-            subtitle);
+            subtitle ?? string.Empty);
     }
 
     private void PaletteBlock_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)

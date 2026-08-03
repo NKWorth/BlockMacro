@@ -9,10 +9,58 @@ public enum MouseButton
 
 public sealed class MouseClickBlock : MacroBlock
 {
-    public int X { get; set; }
-    public int Y { get; set; }
-    public MouseButton Button { get; set; } = MouseButton.Left;
-    public int ClickCount { get; set; } = 1;
+    private int _x;
+    private int _y;
+    private MouseButton _button = MouseButton.Left;
+    private int _clickCount = 1;
+
+    public int X
+    {
+        get => _x;
+        set
+        {
+            if (SetField(ref _x, value))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
+
+    public int Y
+    {
+        get => _y;
+        set
+        {
+            if (SetField(ref _y, value))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
+
+    public MouseButton Button
+    {
+        get => _button;
+        set
+        {
+            if (SetField(ref _button, value))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
+
+    public int ClickCount
+    {
+        get => _clickCount;
+        set
+        {
+            if (SetField(ref _clickCount, Math.Max(1, value)))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
 
     public override string DisplayName => "Mouse Click";
 

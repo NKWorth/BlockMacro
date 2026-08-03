@@ -2,7 +2,19 @@ namespace MacroBlocks.Models;
 
 public sealed class DelayBlock : MacroBlock
 {
-    public int Milliseconds { get; set; } = 500;
+    private int _milliseconds = 500;
+
+    public int Milliseconds
+    {
+        get => _milliseconds;
+        set
+        {
+            if (SetField(ref _milliseconds, Math.Max(0, value)))
+            {
+                OnPropertyChanged(nameof(Summary));
+            }
+        }
+    }
 
     public override string DisplayName => "Delay";
 
