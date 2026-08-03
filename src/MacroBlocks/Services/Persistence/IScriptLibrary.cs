@@ -1,6 +1,6 @@
 using MacroBlocks.Models;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Persistence;
 
 public interface IScriptLibrary
 {

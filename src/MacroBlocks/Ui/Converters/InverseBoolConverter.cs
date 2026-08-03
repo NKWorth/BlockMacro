@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Windows.Data;
 
-namespace MacroBlocks.ViewModels;
+namespace MacroBlocks.Ui.Converters;
 
 /// <summary>
 /// Inverts a bool for bindings such as disabling controls while running.

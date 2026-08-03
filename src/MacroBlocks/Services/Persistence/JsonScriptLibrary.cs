@@ -1,7 +1,7 @@
 using System.IO;
 using MacroBlocks.Models;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Persistence;
 
 /// <summary>
 /// Persists reusable scripts as JSON files under LocalApplicationData/MacroBlocks/library.

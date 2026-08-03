@@ -1,6 +1,6 @@
 using MacroBlocks.Models;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Playback;
 
 public sealed class MacroPlaybackEngine
 {

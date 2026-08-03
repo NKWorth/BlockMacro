@@ -5,6 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="clr-namespace:MacroBlocks.ViewModels"
         xmlns:models="clr-namespace:MacroBlocks.Models"
+        xmlns:ui="clr-namespace:MacroBlocks.Ui"
+        xmlns:conv="clr-namespace:MacroBlocks.Ui.Converters"
         xmlns:local="clr-namespace:MacroBlocks"
         mc:Ignorable="d"
         Title="MacroBlocks"
@@ -82,7 +84,7 @@
                     PreviewMouseMove="BlockItem_PreviewMouseMove"
                     PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
                 <Border.Background>
-                    <MultiBinding Converter="{x:Static local:SelectedBlockBackgroundConverter.Instance}">
+                    <MultiBinding Converter="{x:Static conv:SelectedBlockBackgroundConverter.Instance}">
                         <Binding />
                         <Binding Path="DataContext.SelectedBlock"
                                  RelativeSource="{RelativeSource AncestorType=Window}" />
@@ -149,9 +151,9 @@
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
                                        IsHitTestVisible="False"
-                                       Visibility="{Binding EventSlot, Converter={x:Static vm:NullToVisibilityConverter.WhenNull}}" />
+                                       Visibility="{Binding EventSlot, Converter={x:Static conv:NullToVisibilityConverter.WhenNull}}" />
 
-                            <Border Visibility="{Binding EventSlot, Converter={x:Static vm:NullToVisibilityConverter.Instance}}">
+                            <Border Visibility="{Binding EventSlot, Converter={x:Static conv:NullToVisibilityConverter.Instance}}">
                                 <Border BorderBrush="#F59E0B"
                                         BorderThickness="1"
                                         CornerRadius="4"
@@ -162,7 +164,7 @@
                                         PreviewMouseMove="BlockItem_PreviewMouseMove"
                                         PreviewMouseLeftButtonUp="BlockItem_PreviewMouseLeftButtonUp">
                                     <Border.Background>
-                                        <MultiBinding Converter="{x:Static local:SelectedBlockBackgroundConverter.Instance}">
+                                        <MultiBinding Converter="{x:Static conv:SelectedBlockBackgroundConverter.Instance}">
                                             <Binding />
                                             <Binding Path="DataContext.SelectedBlock"
                                                      RelativeSource="{RelativeSource AncestorType=Window}" />
@@ -220,7 +222,7 @@
             </Border>
         </DataTemplate>
 
-        <local:BlockTemplateSelector x:Key="BlockTemplateSelector"
+        <ui:BlockTemplateSelector x:Key="BlockTemplateSelector"
                                      DefaultTemplate="{StaticResource DefaultBlockTemplate}"
                                      ContinueUntilTemplate="{StaticResource ContinueUntilBlockTemplate}" />
     </Window.Resources>
@@ -248,7 +250,7 @@
                           IsChecked="{Binding LoopForever}"
                           VerticalAlignment="Center"
                           Margin="0,0,16,0"
-                          IsEnabled="{Binding IsRunning, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+                          IsEnabled="{Binding IsRunning, Converter={x:Static conv:InverseBoolConverter.Instance}}" />
                 <Button Content="Run"
                         Style="{StaticResource PrimaryButton}"
                         Command="{Binding RunCommand}"
@@ -469,13 +471,13 @@
                                    Foreground="#6B7280"
                                    FontSize="12"
                                    LineHeight="18"
-                                   Visibility="{Binding SelectedBlock, Converter={x:Static vm:NullToVisibilityConverter.WhenNull}}">
+                                   Visibility="{Binding SelectedBlock, Converter={x:Static conv:NullToVisibilityConverter.WhenNull}}">
                             Select a script block to edit, or a palette block to configure before inserting.
                         </TextBlock>
 
                         <!-- Palette draft banner -->
                         <StackPanel Margin="0,0,0,14"
-                                    Visibility="{Binding IsPaletteDraft, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                                    Visibility="{Binding IsPaletteDraft, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="New block"
                                        FontSize="11"
                                        FontWeight="SemiBold"
@@ -493,7 +495,7 @@
                         </StackPanel>
 
                         <!-- Delay editor -->
-                        <StackPanel Visibility="{Binding HasDelaySelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasDelaySelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedDelay.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"
@@ -506,7 +508,7 @@
                         </StackPanel>
 
                         <!-- Mouse Move editor -->
-                        <StackPanel Visibility="{Binding HasMouseMoveSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasMouseMoveSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedMouseMove.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"
@@ -516,31 +518,31 @@
                             <TextBox Text="{Binding SelectedMouseMove.X, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,10"
                                      Padding="6,4"
-                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static conv:InverseBoolConverter.Instance}}" />
 
                             <TextBlock Text="Y" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
                             <TextBox Text="{Binding SelectedMouseMove.Y, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,10"
                                      Padding="6,4"
-                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static conv:InverseBoolConverter.Instance}}" />
 
                             <TextBlock Text="Duration (ms)" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
                             <TextBox Text="{Binding SelectedMouseMove.DurationMilliseconds, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,0,0,14"
                                      Padding="6,4"
-                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static vm:InverseBoolConverter.Instance}}" />
+                                     IsEnabled="{Binding IsRecordingLocation, Converter={x:Static conv:InverseBoolConverter.Instance}}" />
 
                             <Button Content="Record Location"
                                     Style="{StaticResource PrimaryButton}"
                                     Command="{Binding RecordMouseMoveLocationCommand}"
                                     Margin="0,0,0,8"
-                                    Visibility="{Binding IsRecordingLocation, Converter={x:Static vm:BoolToVisibilityConverter.Inverted}}" />
+                                    Visibility="{Binding IsRecordingLocation, Converter={x:Static conv:BoolToVisibilityConverter.Inverted}}" />
 
                             <Button Content="Cancel Recording"
                                     Style="{StaticResource DangerButton}"
                                     Command="{Binding CancelRecordLocationCommand}"
                                     Margin="0,0,0,8"
-                                    Visibility="{Binding IsRecordingLocation, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}" />
+                                    Visibility="{Binding IsRecordingLocation, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}" />
 
                             <TextBlock TextWrapping="Wrap"
                                        Foreground="#6B7280"
@@ -550,7 +552,7 @@
                         </StackPanel>
 
                         <!-- Mouse Click editor -->
-                        <StackPanel Visibility="{Binding HasMouseClickSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasMouseClickSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedMouseClick.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"
@@ -579,7 +581,7 @@
                         </StackPanel>
 
                         <!-- Key Press editor -->
-                        <StackPanel Visibility="{Binding HasKeyPressSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasKeyPressSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedKeyPress.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"
@@ -602,7 +604,7 @@
                         </StackPanel>
 
                         <!-- Press Key event editor -->
-                        <StackPanel Visibility="{Binding HasKeyPressEventSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasKeyPressEventSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedKeyPressEvent.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"
@@ -626,13 +628,13 @@
                         </StackPanel>
 
                         <!-- Continue Until editor -->
-                        <StackPanel Visibility="{Binding HasContinueUntilSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasContinueUntilSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedContinueUntil.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"
                                        Margin="0,0,0,12" />
 
-                            <StackPanel Visibility="{Binding IsPaletteDraft, Converter={x:Static vm:BoolToVisibilityConverter.Inverted}}">
+                            <StackPanel Visibility="{Binding IsPaletteDraft, Converter={x:Static conv:BoolToVisibilityConverter.Inverted}}">
                                 <TextBlock Text="Until event" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
                                 <ComboBox ItemsSource="{Binding AvailableEvents}"
                                           DisplayMemberPath="Name"
@@ -650,7 +652,7 @@
                         </StackPanel>
 
                         <!-- Run Subscript editor -->
-                        <StackPanel Visibility="{Binding HasRunSubscriptSelection, Converter={x:Static vm:BoolToVisibilityConverter.Instance}}">
+                        <StackPanel Visibility="{Binding HasRunSubscriptSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
                             <TextBlock Text="{Binding SelectedRunSubscript.DisplayName}"
                                        FontWeight="SemiBold"
                                        Foreground="#111827"

@@ -18,7 +18,9 @@ project.fragment.lock.json
 *.DotSettings.user
 
 ## Cursor
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 ## OS
 Thumbs.db

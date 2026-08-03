@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using MacroBlocks.Models;
 
-namespace MacroBlocks;
+namespace MacroBlocks.Ui;
 
 public sealed class BlockTemplateSelector : DataTemplateSelector
 {

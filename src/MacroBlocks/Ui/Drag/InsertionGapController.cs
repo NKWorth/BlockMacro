@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using MacroBlocks.Models;
 
-namespace MacroBlocks;
+namespace MacroBlocks.Ui.Drag;
 
 /// <summary>
 /// Nudges items apart at the prospective drop index during a drag.

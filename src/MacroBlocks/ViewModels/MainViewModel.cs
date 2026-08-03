@@ -3,8 +3,6 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
-using MacroBlocks.Models;
-using MacroBlocks.Services;
 
 namespace MacroBlocks.ViewModels;
 

@@ -2,7 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MacroBlocks.Models;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Persistence;
 
 public static class ScriptJson
 {

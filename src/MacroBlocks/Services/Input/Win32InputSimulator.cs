@@ -2,7 +2,7 @@ using System.Diagnostics;
 using MacroBlocks.Models;
 using MacroBlocks.Native;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Input;
 
 /// <summary>
 /// Windows SendInput-based mouse/keyboard injection.

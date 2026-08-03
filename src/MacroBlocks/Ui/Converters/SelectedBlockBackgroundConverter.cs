@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Media;
 
-namespace MacroBlocks;
+namespace MacroBlocks.Ui.Converters;
 
 public sealed class SelectedBlockBackgroundConverter : IMultiValueConverter
 {

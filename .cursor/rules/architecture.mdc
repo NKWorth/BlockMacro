@@ -1,0 +1,25 @@
+---
+description: MacroBlocks layered architecture and growth conventions
+alwaysApply: true
+---
+
+# MacroBlocks architecture
+
+Place new code in the matching layer:
+
+- **Models/Actions|Events|Flow** — block types under `ActionBlock` / `EventBlock` / `FlowBlock`
+- **Models** — `IBlockContainer`, `IEventSlotHost`, `BlockTree`, scripts only
+- **Services/Playback|Input|Persistence** — no WPF types in Playback
+- **ViewModels** — commands/state; no drag chrome or P/Invoke
+- **Ui/Drag|Converters** — WPF helpers; keep `MainWindow` thin
+- **Native** — P/Invoke only
+
+Rules:
+
+- Namespace matches folder under Models, Services, Ui
+- Extend existing bases/interfaces; register JSON discriminators on `MacroBlock`
+- Use `BlockTree` + `IBlockContainer` / `IEventSlotHost` instead of hard-coding containers
+- Do not add new types to the project root
+- Prefer extracting collaborators over growing `MainViewModel` / `MainWindow`
+
+See `AGENTS.md` for the full layout table.

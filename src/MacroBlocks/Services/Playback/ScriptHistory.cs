@@ -1,7 +1,7 @@
 using System.Windows.Threading;
 using MacroBlocks.Models;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Playback;
 
 /// <summary>
 /// Snapshot-based undo/redo for the working script tree.

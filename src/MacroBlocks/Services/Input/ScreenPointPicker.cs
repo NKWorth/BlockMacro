@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using MacroBlocks.Native;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Input;
 
 /// <summary>
 /// Captures the next left-click screen position via a low-level mouse hook.

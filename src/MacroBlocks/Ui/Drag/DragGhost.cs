@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 
-namespace MacroBlocks;
+namespace MacroBlocks.Ui.Drag;
 
 /// <summary>
 /// Semi-transparent floating preview that follows the cursor during a drag.

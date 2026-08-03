@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using MacroBlocks.Models;
 using MacroBlocks.Native;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Playback;
 
 /// <summary>
 /// While a script runs, watches for manual key presses that match configured Press Key events.

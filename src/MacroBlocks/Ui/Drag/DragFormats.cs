@@ -1,4 +1,4 @@
-namespace MacroBlocks;
+namespace MacroBlocks.Ui.Drag;
 
 internal static class DragFormats
 {

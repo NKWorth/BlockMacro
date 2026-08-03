@@ -1,4 +1,4 @@
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Playback;
 
 /// <summary>
 /// Per-run state for event flags used by branching blocks.

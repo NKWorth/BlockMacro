@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace MacroBlocks.ViewModels;
+namespace MacroBlocks.Ui.Converters;
 
 public sealed class BoolToVisibilityConverter : IValueConverter
 {

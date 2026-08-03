@@ -15,17 +15,27 @@ Windows desktop app for arranging mouse and keyboard actions as reusable blocks,
 dotnet run --project src\MacroBlocks\MacroBlocks.csproj
 ```
 
-## Layout
+## Architecture
 
 ```
 src/MacroBlocks/
   Models/
-    Actions/       # Delay, MouseMove, MouseClick, KeyPress (+ ActionBlock)
-    Events/        # EventBlock, KeyPressEventBlock
-    Flow/          # ContinueUntil, RunSubscript, EndContinue (+ FlowBlock)
-    MacroBlock, MacroScript, BlockTree, ScriptMigrator
-  Services/        # Input simulator, playback engine, script library
+    Actions/       # ActionBlock + Delay, MouseMove, MouseClick, KeyPress
+    Events/        # EventBlock + KeyPressEvent
+    Flow/          # FlowBlock + ContinueUntil, RunSubscript, EndContinue
+  Services/
+    Playback/      # engine, runtime, history, event watcher
+    Input/         # IInputSimulator, Win32 SendInput, point picker
+    Persistence/   # script library + JSON
   ViewModels/      # MainViewModel + commands
-  Native/          # P/Invoke for user32 SendInput
-  MainWindow.xaml  # Block palette + script list + Run/Stop
+  Ui/
+    Drag/          # ghost, formats, insertion gaps
+    Converters/    # WPF value converters
+  Native/          # P/Invoke
+  MainWindow.xaml  # shell view
 ```
+
+Domain hierarchy: `MacroBlock` → `ActionBlock` | `EventBlock` | `FlowBlock`.  
+Containers use `IBlockContainer` / `IEventSlotHost`; walk via `BlockTree`.
+
+See [AGENTS.md](AGENTS.md) for growth conventions.

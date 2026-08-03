@@ -1,6 +1,6 @@
 using MacroBlocks.Models.Actions;
 
-namespace MacroBlocks.Services;
+namespace MacroBlocks.Services.Input;
 
 public interface IInputSimulator
 {
