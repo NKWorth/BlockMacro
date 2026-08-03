@@ -1,0 +1,14 @@
+---
+description: Commit and push every completed change to GitHub
+alwaysApply: true
+---
+
+# Auto-push to GitHub
+
+After completing any code or project changes in this repo:
+
+1. Commit with a clear message following the repo's style
+2. Push to `origin` on the current branch
+
+Do this for every completed change unless the user explicitly says not to push.
+Do not force-push to main/master.
