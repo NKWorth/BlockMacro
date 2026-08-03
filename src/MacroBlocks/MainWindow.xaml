@@ -339,6 +339,13 @@
                                 PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
                                 PreviewMouseMove="PaletteBlock_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
+                        <Button Content="Find Image"
+                                Style="{StaticResource ToolButton}"
+                                Tag="FindImage"
+                                ToolTip="Search the screen or a window for a template image; sets Boolean output"
+                                PreviewMouseLeftButtonDown="PaletteBlock_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="PaletteBlock_PreviewMouseMove"
+                                PreviewMouseLeftButtonUp="PaletteBlock_PreviewMouseLeftButtonUp" />
 
                         <TextBlock Text="Flow"
                                    FontSize="11"
@@ -733,6 +740,118 @@
                                        FontSize="11"
                                        LineHeight="16"
                                        Text="Last Return Boolean in a script sets its Boolean output. Wire the script node's bool port into an If condition on the Flow Graph." />
+                        </StackPanel>
+
+                        <!-- Find Image editor -->
+                        <StackPanel Visibility="{Binding HasFindImageSelection, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                            <TextBlock Text="{Binding SelectedFindImage.DisplayName}"
+                                       FontWeight="SemiBold"
+                                       Foreground="#111827"
+                                       Margin="0,0,0,12" />
+
+                            <TextBlock Text="Template image" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <TextBlock Text="{Binding SelectedFindImage.ImageFileName}"
+                                       FontSize="11"
+                                       Foreground="#374151"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,6"
+                                       Visibility="{Binding SelectedFindImage.HasImage, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}" />
+                            <TextBlock Text="(none selected)"
+                                       FontSize="11"
+                                       Foreground="#9CA3AF"
+                                       Margin="0,0,0,6"
+                                       Visibility="{Binding SelectedFindImage.HasImage, Converter={x:Static conv:BoolToVisibilityConverter.Inverted}}" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="Browse…"
+                                        Padding="10,4"
+                                        Margin="0,0,8,0"
+                                        Command="{Binding BrowseFindImageCommand}" />
+                                <Button Content="Clear"
+                                        Padding="10,4"
+                                        Command="{Binding ClearFindImageCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="Confidence" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <DockPanel Margin="0,0,0,4">
+                                <TextBlock DockPanel.Dock="Right"
+                                           Width="42"
+                                           TextAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Text="{Binding SelectedFindImage.Confidence, StringFormat={}{0:P0}}" />
+                                <Slider Minimum="0.05"
+                                        Maximum="1"
+                                        TickFrequency="0.05"
+                                        IsSnapToTickEnabled="True"
+                                        Value="{Binding SelectedFindImage.Confidence, UpdateSourceTrigger=PropertyChanged}" />
+                            </DockPanel>
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="15"
+                                       Margin="0,0,0,10"
+                                       Text="Lower confidence tolerates transparency and slight visual differences (ghost UI)." />
+
+                            <TextBlock Text="Search scope" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding ImageSearchScopeOptions}"
+                                      DisplayMemberPath="Label"
+                                      SelectedValuePath="Value"
+                                      SelectedValue="{Binding SelectedFindImage.Scope, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,10"
+                                      Padding="4" />
+
+                            <StackPanel Visibility="{Binding SelectedFindImage.UsesWindow, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                                <TextBlock Text="Window title contains" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding SelectedFindImage.WindowTitleContains, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,10"
+                                         Padding="6,4" />
+                                <TextBlock Text="Process name" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                                <TextBox Text="{Binding SelectedFindImage.WindowProcessName, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,4"
+                                         Padding="6,4" />
+                                <TextBlock TextWrapping="Wrap"
+                                           Foreground="#6B7280"
+                                           FontSize="11"
+                                           LineHeight="15"
+                                           Margin="0,0,0,10"
+                                           Text="Resolved at run time. Example process: notepad (optional .exe)." />
+                            </StackPanel>
+
+                            <StackPanel Visibility="{Binding SelectedFindImage.UsesRegion, Converter={x:Static conv:BoolToVisibilityConverter.Instance}}">
+                                <TextBlock Text="Region X / Y" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding SelectedFindImage.RegionX, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6,4" />
+                                    <TextBox Grid.Column="2"
+                                             Text="{Binding SelectedFindImage.RegionY, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6,4" />
+                                </Grid>
+                                <TextBlock Text="Region width / height" FontSize="11" Foreground="#6B7280" Margin="0,0,0,4" />
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding SelectedFindImage.RegionWidth, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6,4" />
+                                    <TextBox Grid.Column="2"
+                                             Text="{Binding SelectedFindImage.RegionHeight, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6,4" />
+                                </Grid>
+                            </StackPanel>
+
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="#6B7280"
+                                       FontSize="11"
+                                       LineHeight="16"
+                                       Text="Sets this script's Boolean output (found = true). Use with Flow Graph If via the script's bool port." />
                         </StackPanel>
 
                         <!-- Flow graph node inspector -->

@@ -1,5 +1,6 @@
 using MacroBlocks.Models;
 using MacroBlocks.Models.Graph;
+using MacroBlocks.Services.Vision;
 
 namespace MacroBlocks.Services.Playback;
 
@@ -7,13 +8,20 @@ public sealed class MacroPlaybackEngine
 {
     private readonly IInputSimulator _input;
     private readonly IScriptLibrary _library;
+    private readonly IImageMatcher _imageMatcher;
     private CancellationTokenSource? _cts;
     private Task? _running;
 
     public MacroPlaybackEngine(IInputSimulator input, IScriptLibrary library)
+        : this(input, library, new OpenCvImageMatcher())
+    {
+    }
+
+    public MacroPlaybackEngine(IInputSimulator input, IScriptLibrary library, IImageMatcher imageMatcher)
     {
         _input = input;
         _library = library;
+        _imageMatcher = imageMatcher;
     }
 
     public bool IsRunning => _running is { IsCompleted: false };
@@ -271,6 +279,11 @@ public sealed class MacroPlaybackEngine
                     StatusChanged?.Invoke(this, $"Return Boolean: {ret.Summary}");
                     break;
 
+                case FindImageBlock find:
+                    StatusChanged?.Invoke(this, $"Running: {find.DisplayName} — {find.Summary}");
+                    await ExecuteFindImageAsync(find, runtime, token).ConfigureAwait(false);
+                    break;
+
                 default:
                     StatusChanged?.Invoke(this, $"Running: {block.DisplayName} — {block.Summary}");
                     await ExecuteActionAsync(block, token).ConfigureAwait(false);
@@ -352,6 +365,22 @@ public sealed class MacroPlaybackEngine
         }
 
         StatusChanged?.Invoke(this, $"Event reached: {continueUntil.EventLabel}");
+    }
+
+    private async Task ExecuteFindImageAsync(
+        FindImageBlock find,
+        ScriptRuntime runtime,
+        CancellationToken token)
+    {
+        TemplateImageStore.EnsureDirectory();
+        var result = await Task.Run(() => _imageMatcher.Find(find, TemplateImageStore.DirectoryPath), token)
+            .ConfigureAwait(false);
+        runtime.SetBooleanOutput(result.Found);
+        StatusChanged?.Invoke(
+            this,
+            result.Found
+                ? $"Find Image: found (score {result.Score:P0})"
+                : $"Find Image: not found (best {result.Score:P0}, need ≥ {find.Confidence:P0})");
     }
 
     private async Task ExecuteActionAsync(MacroBlock block, CancellationToken token)

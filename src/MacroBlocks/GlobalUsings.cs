@@ -6,6 +6,7 @@ global using MacroBlocks.Models.Graph;
 global using MacroBlocks.Services.Input;
 global using MacroBlocks.Services.Persistence;
 global using MacroBlocks.Services.Playback;
+global using MacroBlocks.Services.Vision;
 global using MacroBlocks.Ui;
 global using MacroBlocks.Ui.Converters;
 global using MacroBlocks.Ui.Drag;

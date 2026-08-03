@@ -105,6 +105,12 @@ public sealed class MainViewModel : ViewModelBase
             async () => await RecordMouseMoveLocationAsync(),
             () => !IsRunning && !IsRecordingLocation && SelectedMouseMove is not null);
         CancelRecordLocationCommand = new RelayCommand(CancelRecordLocation, () => IsRecordingLocation);
+        BrowseFindImageCommand = new RelayCommand(
+            BrowseFindImageTemplate,
+            () => CanEditScript() && SelectedFindImage is not null);
+        ClearFindImageCommand = new RelayCommand(
+            ClearFindImageTemplate,
+            () => CanEditScript() && SelectedFindImage is { HasImage: true });
         NewScriptCommand = new RelayCommand(NewScript, CanEditScript);
         SaveScriptCommand = new RelayCommand(SaveScript, () => CanEditScript() && (Blocks.Count > 0 || FlowGraph.HasNodes));
         OpenLibraryScriptCommand = new RelayCommand(OpenLibraryScript, () => CanEditScript() && SelectedLibraryScript is not null);
@@ -252,6 +258,18 @@ public sealed class MainViewModel : ViewModelBase
 
     public ReturnBooleanBlock? SelectedReturnBoolean => SelectedBlock as ReturnBooleanBlock;
     public bool HasReturnBooleanSelection => SelectedReturnBoolean is not null;
+
+    public FindImageBlock? SelectedFindImage => SelectedBlock as FindImageBlock;
+    public bool HasFindImageSelection => SelectedFindImage is not null;
+
+    public IReadOnlyList<ImageSearchScopeOption> ImageSearchScopeOptions { get; } =
+    [
+        new(ImageSearchScope.FullVirtualScreen, "All screens"),
+        new(ImageSearchScope.PrimaryMonitor, "Primary monitor"),
+        new(ImageSearchScope.ScreenRegion, "Screen region"),
+        new(ImageSearchScope.ApplicationWindow, "Application window"),
+        new(ImageSearchScope.ApplicationWindowRegion, "Window region")
+    ];
 
     public KeyPressBlock? SelectedKeyPress => SelectedBlock as KeyPressBlock;
     public bool HasKeyPressSelection => SelectedKeyPress is not null;
@@ -412,6 +430,8 @@ public sealed class MainViewModel : ViewModelBase
     public ICommand StopCommand { get; }
     public ICommand RecordMouseMoveLocationCommand { get; }
     public ICommand CancelRecordLocationCommand { get; }
+    public ICommand BrowseFindImageCommand { get; }
+    public ICommand ClearFindImageCommand { get; }
     public ICommand NewScriptCommand { get; }
     public ICommand SaveScriptCommand { get; }
     public ICommand OpenLibraryScriptCommand { get; }
@@ -433,6 +453,8 @@ public sealed class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasDelaySelection));
         OnPropertyChanged(nameof(SelectedReturnBoolean));
         OnPropertyChanged(nameof(HasReturnBooleanSelection));
+        OnPropertyChanged(nameof(SelectedFindImage));
+        OnPropertyChanged(nameof(HasFindImageSelection));
         OnPropertyChanged(nameof(SelectedKeyPress));
         OnPropertyChanged(nameof(HasKeyPressSelection));
         OnPropertyChanged(nameof(SelectedKeyPressEvent));
@@ -871,6 +893,42 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    private void BrowseFindImageTemplate()
+    {
+        if (SelectedFindImage is null || !CanEditScript())
+        {
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose template image",
+            Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*",
+            CheckFileExists = true
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        SelectedFindImage.ImageFileName = TemplateImageStore.Import(dialog.FileName);
+        Status = "Template image imported";
+        RefreshCommands();
+    }
+
+    private void ClearFindImageTemplate()
+    {
+        if (SelectedFindImage is null || !CanEditScript())
+        {
+            return;
+        }
+
+        SelectedFindImage.ImageFileName = string.Empty;
+        Status = "Template image cleared";
+        RefreshCommands();
+    }
+
     private void CancelRecordLocation()
     {
         _pointPicker.Cancel();
@@ -1108,6 +1166,7 @@ public sealed class MainViewModel : ViewModelBase
             "MouseClick" => new MouseClickBlock { X = 100, Y = 100, Button = MacroBlocks.Models.Actions.MouseButton.Left },
             "KeyPress" => new KeyPressBlock { VirtualKey = 0x41, KeyLabel = "A" },
             "ReturnBoolean" => new ReturnBooleanBlock { Value = true },
+            "FindImage" => new FindImageBlock(),
             "ContinueUntil" => new ContinueUntilBlock(),
             "RunSubscript" => new RunSubscriptBlock(),
             "KeyPressEvent" => new KeyPressEventBlock(),
@@ -1122,6 +1181,7 @@ public sealed class MainViewModel : ViewModelBase
             "MouseClick" => ("Mouse Click", "Left @ (100, 100)"),
             "KeyPress" => ("Key Press", "A"),
             "ReturnBoolean" => ("Return Boolean", "true"),
+            "FindImage" => ("Find Image", "≥ 80% · all screens"),
             "ContinueUntil" => ("Continue Until", "until (no event)"),
             "RunSubscript" => ("Run Subscript", "(no script)"),
             "KeyPressEvent" => ("Event: Press Key", "Press F"),
@@ -1309,6 +1369,8 @@ public sealed class MainViewModel : ViewModelBase
         (StopCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (RecordMouseMoveLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (CancelRecordLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (BrowseFindImageCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (ClearFindImageCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (NewScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (SaveScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (OpenLibraryScriptCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -1317,3 +1379,5 @@ public sealed class MainViewModel : ViewModelBase
         (RedoCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 }
+
+public sealed record ImageSearchScopeOption(ImageSearchScope Value, string Label);

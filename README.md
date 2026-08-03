@@ -20,7 +20,7 @@ dotnet run --project src\MacroBlocks\MacroBlocks.csproj
 ```
 src/MacroBlocks/
   Models/
-    Actions/       # ActionBlock + Delay, MouseMove, MouseClick, KeyPress, ReturnBoolean
+    Actions/       # ActionBlock + Delay, MouseMove, MouseClick, KeyPress, ReturnBoolean, FindImage
     Events/        # EventBlock + KeyPressEvent
     Flow/          # FlowBlock + ContinueUntil, RunSubscript, EndContinue
     Graph/         # FlowGraph orchestration (RunScript / If nodes + edges)
@@ -28,6 +28,7 @@ src/MacroBlocks/
     Playback/      # engine, runtime, history, event watcher, graph walker
     Input/         # IInputSimulator, Win32 SendInput, point picker
     Persistence/   # script library + JSON
+    Vision/        # Find Image: OpenCV template match, capture, image store
   ViewModels/      # MainViewModel, FlowGraphViewModel + commands
   Ui/
     Drag/          # ghost, formats, insertion gaps
@@ -38,6 +39,6 @@ src/MacroBlocks/
 
 Domain hierarchy: `MacroBlock` → `ActionBlock` | `EventBlock` | `FlowBlock`.  
 Containers use `IBlockContainer` / `IEventSlotHost`; walk via `BlockTree`.  
-Orchestration: `MacroScript.FlowGraph` wires library scripts and If branches; `ReturnBoolean` sets subscript Boolean outputs.
+Orchestration: `MacroScript.FlowGraph` wires library scripts and If branches; `ReturnBoolean` / `FindImage` set subscript Boolean outputs.
 
 See [AGENTS.md](AGENTS.md) for growth conventions.

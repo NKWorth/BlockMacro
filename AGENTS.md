@@ -16,7 +16,7 @@ Keep a layered structure. New code belongs in the matching layer and namespace:
 
 ```
 MacroBlock
-├── ActionBlock     Models/Actions/     Delay, MouseMove, MouseClick, KeyPress, ReturnBoolean
+├── ActionBlock     Models/Actions/     Delay, MouseMove, MouseClick, KeyPress, ReturnBoolean, FindImage
 ├── EventBlock      Models/Events/      KeyPressEvent (and future events)
 └── FlowBlock       Models/Flow/        ContinueUntil, RunSubscript, EndContinue
 ```
@@ -29,7 +29,7 @@ Models/Graph/     FlowGraph, FlowGraphNode, FlowGraphEdge, ports/kinds
 
 - Working `MacroScript` owns optional `FlowGraph`. When the graph has nodes, **Run executes the graph**; otherwise the linear `Blocks` list.
 - `RunScript` nodes reference library scripts; `If` nodes branch on a Boolean from a Condition edge.
-- Subscripts expose Booleans via `ReturnBooleanBlock` (last write wins for that run).
+- Subscripts expose Booleans via `ReturnBooleanBlock` or `FindImageBlock` (last write wins for that run).
 
 - Prefer extending the matching base (`ActionBlock` / `EventBlock` / `FlowBlock`).
 - Nested bodies implement `IBlockContainer`; event slots implement `IEventSlotHost`.
@@ -43,9 +43,10 @@ Services/
   Playback/      MacroPlaybackEngine, ScriptRuntime, watchers, ScriptHistory
   Input/         IInputSimulator, Win32InputSimulator, ScreenPointPicker
   Persistence/   IScriptLibrary, JsonScriptLibrary, ScriptJson
+  Vision/        Template match (OpenCV), screen/window capture, image store
 ```
 
-- Depend on interfaces at boundaries (`IInputSimulator`, `IScriptLibrary`).
+- Depend on interfaces at boundaries (`IInputSimulator`, `IScriptLibrary`, `IImageMatcher`).
 - Playback must not reference WPF types.
 
 ### UI
